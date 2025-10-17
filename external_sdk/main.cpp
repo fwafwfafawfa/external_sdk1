@@ -1,12 +1,5 @@
 #include "main.hpp"
 
-//                           __ _       _        
-//                          / _| |     | |       
-//  ___ _ __   _____      _| |_| | __ _| | _____ 
-// / __| '_ \ / _ \ \ /\ / /  _| |/ _` | |/ / _ \ 
-// \__ \ | | | (_) \ V  V /| | | | (_| |   <  __/ dfgasdas
-// |___/_| |_|\___/ \_/\_/ |_| |_|\__,_|_|\_\___|
-
 void reinitialize_game_pointers()
 {
     auto base_address = driver.find_image();
