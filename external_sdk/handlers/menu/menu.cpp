@@ -160,7 +160,7 @@ void c_menu::run_main_window( )
     if ( !this->is_initialized )
         this->setup_main_window( );
 
-    ImGui::Begin( "Made by Buko0365(PRE ALPHA VER 3)" );
+    ImGui::Begin( "Made by Buko0365(PRE ALPHA VER 2)" );
 
     if (ImGui::BeginTabBar("##Tabs"))
     {
