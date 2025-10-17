@@ -15,7 +15,7 @@ void c_misc::teleport_to(uintptr_t player_instance)
     auto target_model = core.get_model_instance(player_instance);
     if (!target_model)
     {
-        util.m_print("Teleport to Player: Failed to get target model.");
+        util.m_print("Teleport to Player: Failed to get target model for 0x%llX.", player_instance);
         return;
     }
 
@@ -23,42 +23,33 @@ void c_misc::teleport_to(uintptr_t player_instance)
     auto target_root = core.find_first_child(target_model, "HumanoidRootPart");
     if (!target_root)
     {
-        util.m_print("Teleport to Player: Failed to get target HumanoidRootPart.");
+        util.m_print("Teleport to Player: Failed to get target HumanoidRootPart for model 0x%llX.", target_model);
         return;
     }
     auto p_target_root = driver.read<uintptr_t>(target_root + offsets::Primitive);
     if (!p_target_root)
     {
-        util.m_print("Teleport to Player: Failed to get target Primitive.");
+        util.m_print("Teleport to Player: Failed to get target Primitive for HumanoidRootPart 0x%llX.", target_root);
         return;
     }
-    vector w_target_pos = driver.read<vector>(p_target_root + offsets::Position);
+    vector w_target_pos_raw = driver.read<vector>(p_target_root + offsets::Position);
+    util.m_print("Teleport to Player: Raw target position: (%.1f, %.1f, %.1f)", w_target_pos_raw.x, w_target_pos_raw.y, w_target_pos_raw.z);
 
-    // Get local player's character model
-    uintptr_t local_player_character_model = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
-    if (!local_player_character_model)
-    {
-        util.m_print("Teleport to Player: Failed to get local player model.");
-        return;
-    }
+    // Apply configurable offsets
+    vector w_target_pos_final = w_target_pos_raw;
+    w_target_pos_final.y += vars::misc::teleport_offset_y;
+    w_target_pos_final.z += vars::misc::teleport_offset_z;
+    util.m_print("Teleport to Player: Final target position (with offsets): (%.1f, %.1f, %.1f)", w_target_pos_final.x, w_target_pos_final.y, w_target_pos_final.z);
 
-    // Get local player's HumanoidRootPart address
-    auto local_root = core.find_first_child(local_player_character_model, "HumanoidRootPart");
-    if (!local_root)
-    {
-        util.m_print("Teleport to Player: Failed to get local HumanoidRootPart.");
-        return;
-    }
-    auto p_local_root = driver.read<uintptr_t>(local_root + offsets::Primitive);
-    if (!p_local_root)
-    {
-        util.m_print("Teleport to Player: Failed to get local Primitive.");
+    // Validate final target position
+    if (!std::isfinite(w_target_pos_final.x) || !std::isfinite(w_target_pos_final.y) || !std::isfinite(w_target_pos_final.z)) {
+        util.m_print("Teleport to Player: Aborting teleport due to invalid (NaN/Infinity) final target position.");
         return;
     }
 
-    // Write target position to local player's position
-    driver.write<vector>(p_local_root + offsets::Position, w_target_pos);
-    util.m_print("Teleport to Player: Teleported local player to (%.1f, %.1f, %.1f). WARNING: HIGH DETECTION RISK!", w_target_pos.x, w_target_pos.y, w_target_pos.z);
+    // Call the more reliable teleport_to_position function
+    teleport_to_position(w_target_pos_final);
+    util.m_print("Teleport to Player: Teleported local player to (%.1f, %.1f, %.1f). WARNING: HIGH DETECTION RISK!", w_target_pos_final.x, w_target_pos_final.y, w_target_pos_final.z);
 }
 
 void c_misc::teleport_to_position(vector target_pos)

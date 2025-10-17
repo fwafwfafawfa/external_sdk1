@@ -102,6 +102,12 @@ void c_config::save( const std::string& filename )
         // Jump Power
         file << "jump_power_toggled=" << (vars::jump_power::toggled ? "true" : "false") << std::endl;
         file << "jump_power_value=" << vars::jump_power::value << std::endl;
+        file << "jump_power_default_value=" << vars::jump_power::default_value << std::endl;
+
+        // Misc
+        file << "misc_show_workspace_viewer=" << (vars::misc::show_workspace_viewer ? "true" : "false") << std::endl;
+        file << "misc_teleport_offset_y=" << vars::misc::teleport_offset_y << std::endl;
+        file << "misc_teleport_offset_z=" << vars::misc::teleport_offset_z << std::endl;
 
         file.close();
         std::cout << "Config saved to " << filename << std::endl;
@@ -157,6 +163,12 @@ void c_config::load( const std::string& filename )
         // Jump Power
         vars::jump_power::toggled = get_value(data, "jump_power_toggled", vars::jump_power::toggled);
         vars::jump_power::value = get_value(data, "jump_power_value", vars::jump_power::value);
+        vars::jump_power::default_value = get_value(data, "jump_power_default_value", vars::jump_power::default_value);
+
+        // Misc
+        vars::misc::show_workspace_viewer = get_value(data, "misc_show_workspace_viewer", vars::misc::show_workspace_viewer);
+        vars::misc::teleport_offset_y = get_value(data, "misc_teleport_offset_y", vars::misc::teleport_offset_y);
+        vars::misc::teleport_offset_z = get_value(data, "misc_teleport_offset_z", vars::misc::teleport_offset_z);
 
         std::cout << "Config loaded from " << filename << std::endl;
     }

@@ -1,5 +1,6 @@
 #include "menu.hpp"
 #include "../vars.hpp"
+#include "../../game/features/player_info/player_info.hpp"
 
 // Helper function to convert virtual key codes to strings
 static std::string virtual_key_to_string( int virtual_key )
@@ -160,7 +161,7 @@ void c_menu::run_main_window( )
     if ( !this->is_initialized )
         this->setup_main_window( );
 
-    ImGui::Begin( "Made by Buko0365(PRE ALPHA VER 2)" );
+    ImGui::Begin( "Made by Buko0365(PRE ALPHA VER 3)" );
 
     if (ImGui::BeginTabBar("##Tabs"))
     {
@@ -217,7 +218,8 @@ void c_menu::run_main_window( )
 
         if (ImGui::BeginTabItem("Players"))
         {
-            static uintptr_t selected_player_instance = 0; // To store the currently selected player
+            ImGui::Columns(2, "PlayerSplit");
+            ImGui::SetColumnWidth(0, ImGui::GetWindowWidth() * 0.4f);
 
             ImGui::Text("Player List:");
             std::vector< uintptr_t > players = core.get_players( g_main::datamodel );
@@ -233,27 +235,19 @@ void c_menu::run_main_window( )
                         continue;
                     std::string player_name = core.get_instance_name( player_instance );
                     
-                    if (ImGui::Selectable(player_name.c_str(), selected_player_instance == player_instance))
+                    if (ImGui::Selectable(player_name.c_str(), vars::misc::selected_player_for_info == player_instance))
                     {
-                        selected_player_instance = player_instance;
+                        vars::misc::selected_player_for_info = player_instance;
                     }
                 }
             }
 
-            if (selected_player_instance != 0)
-            {
-                ImGui::Separator();
-                ImGui::Text("Selected Player: %s", core.get_instance_name(selected_player_instance).c_str());
-                if (ImGui::Button("Teleport to Selected"))
-                {
-                    misc.teleport_to(selected_player_instance);
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Spectate Selected"))
-                {
-                    misc.spectate(selected_player_instance);
-                }
-            }
+            ImGui::NextColumn();
+            ImGui::Text("Player Details:");
+            ImGui::Separator();
+            player_info.draw_player_info(vars::misc::selected_player_for_info);
+
+            ImGui::Columns(1);
             ImGui::EndTabItem();
         }
 
@@ -269,6 +263,7 @@ void c_menu::run_main_window( )
             ImGui::Separator();
             ImGui::Checkbox("Jump Power", &vars::jump_power::toggled);
             ImGui::SliderFloat("Jump Power Value", &vars::jump_power::value, 0.0f, 500.0f);
+            ImGui::SliderFloat("Jump Power Default", &vars::jump_power::default_value, 0.0f, 500.0f, "%.1f");
 
             ImGui::EndTabItem();
         }
@@ -276,6 +271,8 @@ void c_menu::run_main_window( )
         if (ImGui::BeginTabItem("Misc"))
         {
             ImGui::Checkbox("Workspace Viewer", &vars::misc::show_workspace_viewer);
+            ImGui::SliderFloat("Teleport Offset Y", &vars::misc::teleport_offset_y, -20.0f, 20.0f, "%.1f");
+            ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f, "%.1f");
             ImGui::EndTabItem();
         }
 

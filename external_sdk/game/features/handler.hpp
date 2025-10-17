@@ -1,6 +1,7 @@
 #pragma once
 #include "freecam/freecam.hpp"
 #include "jump_power/jump_power.hpp"
+#include "player_info/player_info.hpp"
 
 class c_feature_handler
 {

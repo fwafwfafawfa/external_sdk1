@@ -90,6 +90,9 @@
     <ClCompile Include="game\features\jump_power\jump_power.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="game\features\player_info\player_info.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.hpp">
@@ -177,6 +180,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="game\features\jump_power\jump_power.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game\features\player_info\player_info.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

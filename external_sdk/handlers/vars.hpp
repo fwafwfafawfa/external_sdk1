@@ -52,12 +52,16 @@ namespace vars
     namespace jump_power
     {
         inline bool toggled = false;
-        inline float value = 50.0f; // Default Roblox JumpPower is 50
+        inline float value = 50.0f; // Default Roblox JumpPower
+        inline float default_value = 50.0f; // Configurable default value for reset
     }
 
     namespace misc
     {
         inline bool show_workspace_viewer = false;
+        inline float teleport_offset_y = 5.0f; // Default vertical offset
+        inline float teleport_offset_z = 3.0f; // Default horizontal offset (in front of target)
+        inline uintptr_t selected_player_for_info = 0; // Stores the address of the player selected for detailed info
     }
 }
 

@@ -21,10 +21,14 @@ namespace jump_power
         if (current_toggled)
         {
             driver.write<float>(humanoid_ptr + offsets::JumpPower, current_value);
+            util.m_print("Jump Power: Toggled ON. Setting to %.1f", current_value);
         }
-        else if (last_toggled_state) // If hack was ON last frame but is now OFF, reset to default
+        else if (last_toggled_state && !current_toggled) // If hack was ON last frame but is now OFF, reset to default
         {
-            driver.write<float>(humanoid_ptr + offsets::JumpPower, 50.0f);
+            util.m_print("Jump Power: Toggled OFF. Attempting to reset to %.1f. Humanoid PTR: 0x%llX", vars::jump_power::default_value, humanoid_ptr);
+            driver.write<float>(humanoid_ptr + offsets::JumpPower, vars::jump_power::default_value);
+            float actual_jump_power_after_reset = driver.read<float>(humanoid_ptr + offsets::JumpPower);
+            util.m_print("Jump Power: Value after reset attempt: %.1f", actual_jump_power_after_reset);
         }
 
         // Update static variables for next frame's comparison
