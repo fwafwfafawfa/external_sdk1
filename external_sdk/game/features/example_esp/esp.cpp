@@ -264,20 +264,11 @@ void c_esp::run_aimbot( matrix viewmatrix )
             continue;
 
         vector w_target_bone_pos = driver.read< vector >( p_target_bone + offsets::Position );
-        vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity );
-
-        // Simple prediction: assume instant hitscan for now
-        // In a real scenario, you'd calculate time_to_target based on bullet speed and distance
-        float prediction_time = 0.05f; // Small constant for basic prediction
-
-        vector predicted_w_target_bone_pos = w_target_bone_pos;
-        predicted_w_target_bone_pos.x += v_player_root.x * prediction_time;
-        predicted_w_target_bone_pos.y += v_player_root.y * prediction_time;
-        predicted_w_target_bone_pos.z += v_player_root.z * prediction_time;
+        // vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity ); // Not needed without prediction
 
         vector2d s_target_bone_pos;
 
-        if ( !core.world_to_screen( predicted_w_target_bone_pos, s_target_bone_pos, viewmatrix ) )
+        if ( !core.world_to_screen( w_target_bone_pos, s_target_bone_pos, viewmatrix ) )
             continue;
 
         float distance = sqrt( pow( s_target_bone_pos.x - crosshair_pos.x, 2 ) + pow( s_target_bone_pos.y - crosshair_pos.y, 2 ) );
@@ -303,17 +294,11 @@ void c_esp::run_aimbot( matrix viewmatrix )
         auto target_bone = core.find_first_child( model, target_bone_name );
         auto p_target_bone = driver.read< uintptr_t >( target_bone + offsets::Primitive );
         vector w_target_bone_pos = driver.read< vector >( p_target_bone + offsets::Position );
-
-        float prediction_time = 0.05f; // Same constant for final aim
-
-        vector predicted_w_target_bone_pos = w_target_bone_pos;
-        predicted_w_target_bone_pos.x += v_player_root.x * prediction_time;
-        predicted_w_target_bone_pos.y += v_player_root.y * prediction_time;
-        predicted_w_target_bone_pos.z += v_player_root.z * prediction_time;
+        // vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity ); // Not needed without prediction
 
         vector2d s_target_bone_pos;
 
-        if ( core.world_to_screen( predicted_w_target_bone_pos, s_target_bone_pos, viewmatrix ) )
+        if ( core.world_to_screen( w_target_bone_pos, s_target_bone_pos, viewmatrix ) )
         {
             float delta_x = s_target_bone_pos.x - crosshair_pos.x;
             float delta_y = s_target_bone_pos.y - crosshair_pos.y;
