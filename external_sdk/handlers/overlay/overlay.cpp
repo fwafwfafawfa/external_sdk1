@@ -219,33 +219,38 @@ void c_overlay::start( )
         ImGui_ImplWin32_NewFrame( );
         ImGui::NewFrame( );
 
-        feature_handler.start( g_main::datamodel );
         rescan.start_search( );
-        noclip.run();
-        //menu.debug_element( );
 
+        // Only run game-dependent features if the datamodel has been found
+        if (g_main::datamodel)
+        {
+            feature_handler.start( g_main::datamodel );
+            noclip.run();
+
+            if (vars::misc::show_workspace_viewer)
+            {
+                workspace_viewer.run();
+
+                // Store original depth stencil state
+                ID3D11DepthStencilState* p_old_depth_stencil_state = nullptr;
+                UINT stencil_ref = 0;
+                d3d_device_context->OMGetDepthStencilState(&p_old_depth_stencil_state, &stencil_ref);
+
+                // Apply no-depth stencil state for drawing through walls
+                d3d_device_context->OMSetDepthStencilState(no_depth_stencil_state, 0);
+
+                workspace_viewer.draw_selected_instance_highlight(); // Call highlight function
+
+                // Restore original depth stencil state
+                d3d_device_context->OMSetDepthStencilState(p_old_depth_stencil_state, stencil_ref);
+                if (p_old_depth_stencil_state) p_old_depth_stencil_state->Release(); // Release the retrieved state
+            }
+        }
+
+        // Always run the menu
         if ( overlay_enabled )
         {
             menu.run_main_window( );
-        }
-
-        if (vars::misc::show_workspace_viewer)
-        {
-            workspace_viewer.run();
-
-            // Store original depth stencil state
-            ID3D11DepthStencilState* p_old_depth_stencil_state = nullptr;
-            UINT stencil_ref = 0;
-            d3d_device_context->OMGetDepthStencilState(&p_old_depth_stencil_state, &stencil_ref);
-
-            // Apply no-depth stencil state for drawing through walls
-            d3d_device_context->OMSetDepthStencilState(no_depth_stencil_state, 0);
-
-            workspace_viewer.draw_selected_instance_highlight(); // Call highlight function
-
-            // Restore original depth stencil state
-            d3d_device_context->OMSetDepthStencilState(p_old_depth_stencil_state, stencil_ref);
-            if (p_old_depth_stencil_state) p_old_depth_stencil_state->Release(); // Release the retrieved state
         }
 
         ImGui::Render( );

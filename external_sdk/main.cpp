@@ -7,10 +7,22 @@ void reinitialize_game_pointers()
         util.m_print("Failed to find base address.");
         return;
     }
+    util.m_print("Debug: Base Address: 0x%llX", base_address);
+    util.m_print("Debug: FakeDataModelPointer Offset: 0x%llX", offsets::FakeDataModelPointer);
+    util.m_print("Debug: Calculated FakeDataModelPointer Address: 0x%llX", base_address + offsets::FakeDataModelPointer);
 
-    uintptr_t fake_datamodel_pointer = driver.read<uintptr_t>(base_address + offsets::FakeDataModelPointer);
+    uintptr_t fake_datamodel_pointer = 0;
+    for (int i = 0; i < 10; ++i) {
+        fake_datamodel_pointer = driver.read<uintptr_t>(base_address + offsets::FakeDataModelPointer);
+        if (fake_datamodel_pointer) {
+            break;
+        }
+        util.m_print("Failed to find fake datamodel pointer, retrying...");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
     if (!fake_datamodel_pointer) {
-        util.m_print("Failed to find fake datamodel pointer.");
+        util.m_print("Failed to find fake datamodel pointer after multiple retries.");
         return;
     }
 
@@ -76,7 +88,7 @@ int main( )
 
     util.m_print( "Process ID: %d", process );
 
-    reinitialize_game_pointers();
+    // reinitialize_game_pointers(); // This is now handled by the rescan thread in the main loop
 
     config.load("settings.ini"); // Load settings on startup
 

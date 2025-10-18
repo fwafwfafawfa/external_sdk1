@@ -42,7 +42,7 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
             ImGui::Text("Health: %.1f / %.1f", health, max_health);
             ImGui::ProgressBar(health / max_health, ImVec2(-FLT_MIN, 0.0f), std::to_string((int)health).c_str());
 
-            float walkspeed = driver.read<float>(humanoid + offsets::WalkSpeed);
+            float walkspeed = driver.read<float>(humanoid + offsets::Walkspeed);
             ImGui::Text("WalkSpeed: %.1f", walkspeed);
 
             float jumppower = driver.read<float>(humanoid + offsets::JumpPower);

@@ -14,6 +14,7 @@ void c_rescan::start_search( )
 
     if ( current_place_id == 0 || current_place_id != m_last_place_id )
     {
+        util.m_print("Scanning for new pointers...");
         m_last_place_id = current_place_id;
 
         auto base_address = driver.find_image( );

@@ -18,16 +18,19 @@ bool c_driver::find_driver( ) {
     return driver_handle != nullptr && driver_handle != INVALID_HANDLE_VALUE;
 }
 
-void c_driver::read_physical( void* address, void* buffer, DWORD size ) {
+void c_driver::read_physical(void* address, void* buffer, DWORD size) {
     read_write args{};
     args.security = SCODE_SECURITY;
-    args.address = reinterpret_cast< uint64_t >( address );
-    args.buffer = reinterpret_cast< uint64_t >( buffer );
+    args.address = reinterpret_cast<uint64_t>(address);
+    args.buffer = 0; // Not used for input
     args.size = size;
     args.process_id = process_id;
     args.write = false;
+    DWORD bytesReturned = 0;
 
-    DeviceIoControl( driver_handle, MEDREADWYY, &args, sizeof( args ), nullptr, 0, nullptr, nullptr );
+    if (!DeviceIoControl(driver_handle, MEDREADWYY, &args, sizeof(args), buffer, size, &bytesReturned, nullptr)) {
+        printf("\033[91m[error] \033[0mDeviceIoControl failed in read_physical. GetLastError() = %d\n", GetLastError());
+    }
 }
 
 void c_driver::write_physical( void* address, void* buffer, DWORD size ) {
@@ -39,7 +42,10 @@ void c_driver::write_physical( void* address, void* buffer, DWORD size ) {
     args.process_id = process_id;
     args.write = true;
 
-    DeviceIoControl( driver_handle, MEDREADWYY, &args, sizeof( args ), nullptr, 0, nullptr, nullptr );
+    if ( !DeviceIoControl( driver_handle, MEDREADWYY, &args, sizeof( args ), nullptr, 0, nullptr, nullptr ) )
+    {
+        printf( "\033[91m[error] \033[0mDeviceIoControl failed in write_physical. GetLastError() = %d\n", GetLastError() );
+    }
 }
 
 uintptr_t c_driver::find_image( ) {
