@@ -94,6 +94,8 @@ void c_config::save( const std::string& filename )
         file << "aimbot_use_set_cursor_pos=" << (vars::aimbot::use_set_cursor_pos ? "true" : "false") << std::endl;
         file << "aimbot_smoothing_factor=" << vars::aimbot::smoothing_factor << std::endl;
         file << "aimbot_activation_key=" << vars::aimbot::activation_key << std::endl;
+        file << "aimbot_show_fov_circle=" << (vars::aimbot::show_fov_circle ? "true" : "false") << std::endl;
+        file << "aimbot_prediction=" << (vars::aimbot::prediction ? "true" : "false") << std::endl;
 
         // Speed Hack
         file << "speed_hack_toggled=" << (vars::speed_hack::toggled ? "true" : "false") << std::endl;
@@ -155,6 +157,8 @@ void c_config::load( const std::string& filename )
         vars::aimbot::use_set_cursor_pos = get_value(data, "aimbot_use_set_cursor_pos", vars::aimbot::use_set_cursor_pos);
         vars::aimbot::smoothing_factor = get_value(data, "aimbot_smoothing_factor", vars::aimbot::smoothing_factor);
         vars::aimbot::activation_key = get_value(data, "aimbot_activation_key", vars::aimbot::activation_key);
+        vars::aimbot::show_fov_circle = get_value(data, "aimbot_show_fov_circle", vars::aimbot::show_fov_circle);
+        vars::aimbot::prediction = get_value(data, "aimbot_prediction", vars::aimbot::prediction);
 
         // Speed Hack
         vars::speed_hack::toggled = get_value(data, "speed_hack_toggled", vars::speed_hack::toggled);

@@ -206,12 +206,9 @@ void c_esp::run_players( matrix viewmatrix )
     }
 }
 
-void c_esp::run_aimbot( matrix viewmatrix )
+void c_esp::run_aimbot(matrix viewmatrix)
 {
-    uintptr_t closest_player = 0;
-    float closest_distance = FLT_MAX;
-
-    vector2d crosshair_pos = { static_cast<float>(core.get_screen_width( ) / 2), static_cast<float>(core.get_screen_height( ) / 2) };
+    vector2d crosshair_pos = { static_cast<float>(core.get_screen_width() / 2), static_cast<float>(core.get_screen_height() / 2) };
 
     // Draw FOV Circle
     if (vars::aimbot::show_fov_circle)
@@ -219,82 +216,146 @@ void c_esp::run_aimbot( matrix viewmatrix )
         draw.circle(ImVec2(crosshair_pos.x, crosshair_pos.y), vars::aimbot::fov, ImColor(255, 255, 255, 255), 1.0f);
     }
 
-    if ( !vars::aimbot::toggled || !GetAsyncKeyState( vars::aimbot::activation_key ) )
+    if (!vars::aimbot::toggled || !GetAsyncKeyState(vars::aimbot::activation_key))
     {
         this->leftover_x = 0.0f;
         this->leftover_y = 0.0f;
         this->smoothed_delta_x = 0.0f;
         this->smoothed_delta_y = 0.0f;
+        this->locked_target = 0; // Reset locked target when aimbot is inactive
         return;
     }
 
-    std::vector< uintptr_t > players = core.get_players( g_main::datamodel );
+    std::vector< uintptr_t > players = core.get_players(g_main::datamodel);
+    uintptr_t current_target = 0;
 
-    for ( auto& player : players )
+    // --- Target Lock Logic ---
+    // 1. Try to validate the existing locked_target
+    if (this->locked_target != 0)
     {
-        if ( !player || player == g_main::localplayer )
-            continue;
-
-        uintptr_t player_team = driver.read<uintptr_t>( player + offsets::Team );
-        if ( player_team == g_main::localplayer_team && player_team != 0 )
-            continue;
-
-        auto model = core.get_model_instance( player );
-        if ( !model )
-            continue;
-
-        auto humanoid = core.find_first_child_class( model, "Humanoid" );
-        if ( !humanoid )
-            continue;
-
-        float health = driver.read< float >( humanoid + offsets::Health );
-        if ( !health )
-            continue;
-
-        // Get HumanoidRootPart for velocity
-        auto player_root = core.find_first_child( model, "HumanoidRootPart" );
-        if ( !player_root )
-            continue;
-
-        auto p_player_root = driver.read< uintptr_t >( player_root + offsets::Primitive );
-        if ( !p_player_root )
-            continue;
-
-        // Determine target bone based on aimbot_hitbox setting
-        const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
-        auto target_bone = core.find_first_child( model, target_bone_name );
-        if ( !target_bone )
-            continue;
-        auto p_target_bone = driver.read< uintptr_t >( target_bone + offsets::Primitive );
-        if ( !p_target_bone )
-            continue;
-
-        vector w_target_bone_pos = driver.read< vector >( p_target_bone + offsets::Position );
-        vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity ); // Read velocity for prediction
-
-        // Apply prediction if enabled
-        if (vars::aimbot::prediction) {
-            float time_to_target = 0.1f; // Simple fixed prediction time (adjust as needed)
-            w_target_bone_pos = w_target_bone_pos + (v_player_root * time_to_target);
-        }
-
-        vector2d s_target_bone_pos;
-
-        if ( !core.world_to_screen( w_target_bone_pos, s_target_bone_pos, viewmatrix ) )
-            continue;
-
-        float distance = sqrt( pow( s_target_bone_pos.x - crosshair_pos.x, 2 ) + pow( s_target_bone_pos.y - crosshair_pos.y, 2 ) );
-
-        if ( distance < closest_distance && distance < vars::aimbot::fov )
+        bool locked_target_still_valid = false;
+        // Check if the locked target is still in the current list of players
+        for (auto& player : players)
         {
-            closest_distance = distance;
-            closest_player = player;
+            if (player == this->locked_target)
+            {
+                auto model = core.get_model_instance(player);
+                if (model)
+                {
+                    auto humanoid = core.find_first_child_class(model, "Humanoid");
+                    if (humanoid)
+                    {
+                        float health = driver.read< float >(humanoid + offsets::Health);
+                        if (health > 0.0f)
+                        {
+                            const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
+                            auto target_bone = core.find_first_child(model, target_bone_name);
+                            if (target_bone)
+                            {
+                                auto p_target_bone = driver.read< uintptr_t >(target_bone + offsets::Primitive);
+                                if (p_target_bone)
+                                {
+                                    vector w_target_bone_pos = driver.read< vector >(p_target_bone + offsets::Position);
+                                    vector2d s_target_bone_pos;
+                                    if (core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
+                                    {
+                                        float distance = sqrt(pow(s_target_bone_pos.x - crosshair_pos.x, 2) + pow(s_target_bone_pos.y - crosshair_pos.y, 2));
+                                        if (distance < vars::aimbot::fov)
+                                        {
+                                            locked_target_still_valid = true;
+                                            current_target = this->locked_target; // Keep aiming at this target
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!locked_target_still_valid)
+        {
+            this->locked_target = 0; // Invalidate if not found, dead, or out of FOV
         }
     }
 
-    if ( closest_player )
+    // 2. If no target is locked (or locked_target became invalid), find the closest new target
+    if (this->locked_target == 0)
     {
-        auto model = core.get_model_instance( closest_player );
+        uintptr_t new_closest_player = 0;
+        float new_closest_distance = FLT_MAX;
+
+        for (auto& player : players)
+        {
+            if (!player || player == g_main::localplayer)
+                continue;
+
+            uintptr_t player_team = driver.read<uintptr_t>(player + offsets::Team);
+            if (player_team == g_main::localplayer_team && player_team != 0)
+                continue;
+
+            auto model = core.get_model_instance(player);
+            if (!model)
+                continue;
+
+            auto humanoid = core.find_first_child_class(model, "Humanoid");
+            if (!humanoid)
+                continue;
+
+            float health = driver.read< float >(humanoid + offsets::Health);
+            if (health <= 0.0f) // Skip dead players
+                continue;
+
+            // Get HumanoidRootPart for velocity
+            auto player_root = core.find_first_child(model, "HumanoidRootPart");
+            if (!player_root)
+                continue;
+
+            auto p_player_root = driver.read< uintptr_t >(player_root + offsets::Primitive);
+            if (!p_player_root)
+                continue;
+
+            // Determine target bone based on aimbot_hitbox setting
+            const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
+            auto target_bone = core.find_first_child(model, target_bone_name);
+            if (!target_bone)
+                continue;
+            auto p_target_bone = driver.read< uintptr_t >(target_bone + offsets::Primitive);
+            if (!p_target_bone)
+                continue;
+
+            vector w_target_bone_pos = driver.read< vector >(p_target_bone + offsets::Position);
+            vector v_player_root = driver.read< vector >(p_player_root + offsets::Velocity); // Read velocity for prediction
+
+            // Apply prediction if enabled
+            if (vars::aimbot::prediction) {
+                float time_to_target = 0.1f; // Simple fixed prediction time (adjust as needed)
+                w_target_bone_pos = w_target_bone_pos + (v_player_root * time_to_target);
+            }
+
+            vector2d s_target_bone_pos;
+
+            if (!core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
+                continue;
+
+            float distance = sqrt(pow(s_target_bone_pos.x - crosshair_pos.x, 2) + pow(s_target_bone_pos.y - crosshair_pos.y, 2));
+
+            if (distance < new_closest_distance && distance < vars::aimbot::fov)
+            {
+                new_closest_distance = distance;
+                new_closest_player = player;
+            }
+        }
+        current_target = new_closest_player;
+        this->locked_target = new_closest_player; // Lock onto the new closest player
+    }
+
+    // --- End Target Lock Logic ---
+
+    if ( current_target )
+    {
+        auto model = core.get_model_instance( current_target );
 
         // Get HumanoidRootPart for velocity again for the final aim
         auto player_root = core.find_first_child( model, "HumanoidRootPart" );
@@ -306,7 +367,6 @@ void c_esp::run_aimbot( matrix viewmatrix )
         auto target_bone = core.find_first_child( model, target_bone_name );
         auto p_target_bone = driver.read< uintptr_t >( target_bone + offsets::Primitive );
         vector w_target_bone_pos = driver.read< vector >( p_target_bone + offsets::Position );
-        // vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity ); // Not needed without prediction
 
         vector2d s_target_bone_pos;
 
@@ -343,7 +403,7 @@ void c_esp::run_aimbot( matrix viewmatrix )
                 // Calculate smoothed movement
                 float smooth_factor = 1.0f / vars::aimbot::speed; // Use speed as smoothing factor
                 int move_x = static_cast<int>(current_mouse_pos.x + (target_x - current_mouse_pos.x) * smooth_factor);
-                int move_y = static_cast<int>(current_mouse_pos.y + (target_y - current_mouse_pos.y) * smooth_factor);
+                int move_y = static_cast<int>(current_mouse_pos.y + (target_y - current_mouse_pos.y) * smooth_factor) ;
 
                 // Ensure at least 1 pixel movement if not at target
                 if (move_x == current_mouse_pos.x && target_x != current_mouse_pos.x) {
@@ -352,8 +412,6 @@ void c_esp::run_aimbot( matrix viewmatrix )
                 if (move_y == current_mouse_pos.y && target_y != current_mouse_pos.y) {
                     move_y += (target_y > current_mouse_pos.y ? 1 : -1);
                 }
-
-                util.m_print("SetCursorPos Debug: Target(%d, %d), Current(%d, %d), Move(%d, %d)", target_x, target_y, current_mouse_pos.x, current_mouse_pos.y, move_x, move_y);
 
                 SetCursorPos(move_x, move_y);
 
