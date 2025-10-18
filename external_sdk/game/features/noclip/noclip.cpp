@@ -23,7 +23,11 @@ void c_noclip::run() {
 
     auto children = core.children(character);
     for (auto child : children) {
-        instance inst(child);
-        inst.SetCanCollide(false);
+        std::string className = core.get_instance_classname(child);
+        // Only attempt to modify actual parts
+        if (className.find("Part") != std::string::npos || className.find("Mesh") != std::string::npos) {
+            instance inst(child);
+            inst.SetCanCollide(false);
+        }
     }
 }
