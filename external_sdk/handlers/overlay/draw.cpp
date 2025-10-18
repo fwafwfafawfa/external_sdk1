@@ -55,3 +55,9 @@ void c_draw::line( ImVec2 start, ImVec2 end, ImColor color, float thickness = 1.
     auto foreground_draw_list = ImGui::GetForegroundDrawList( );
     foreground_draw_list->AddLine( start, end, color, thickness );
 }
+
+void c_draw::circle( ImVec2 center, float radius, ImColor color, float thickness = 1.0f )
+{
+    auto foreground_draw_list = ImGui::GetForegroundDrawList( );
+    foreground_draw_list->AddCircle( center, radius, color, 0, thickness );
+}

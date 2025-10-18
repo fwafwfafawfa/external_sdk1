@@ -208,6 +208,17 @@ void c_esp::run_players( matrix viewmatrix )
 
 void c_esp::run_aimbot( matrix viewmatrix )
 {
+    uintptr_t closest_player = 0;
+    float closest_distance = FLT_MAX;
+
+    vector2d crosshair_pos = { static_cast<float>(core.get_screen_width( ) / 2), static_cast<float>(core.get_screen_height( ) / 2) };
+
+    // Draw FOV Circle
+    if (vars::aimbot::show_fov_circle)
+    {
+        draw.circle(ImVec2(crosshair_pos.x, crosshair_pos.y), vars::aimbot::fov, ImColor(255, 255, 255, 255), 1.0f);
+    }
+
     if ( !vars::aimbot::toggled || !GetAsyncKeyState( vars::aimbot::activation_key ) )
     {
         this->leftover_x = 0.0f;
@@ -216,11 +227,6 @@ void c_esp::run_aimbot( matrix viewmatrix )
         this->smoothed_delta_y = 0.0f;
         return;
     }
-
-    uintptr_t closest_player = 0;
-    float closest_distance = FLT_MAX;
-
-    vector2d crosshair_pos = { static_cast<float>(core.get_screen_width( ) / 2), static_cast<float>(core.get_screen_height( ) / 2) };
 
     std::vector< uintptr_t > players = core.get_players( g_main::datamodel );
 
@@ -264,7 +270,13 @@ void c_esp::run_aimbot( matrix viewmatrix )
             continue;
 
         vector w_target_bone_pos = driver.read< vector >( p_target_bone + offsets::Position );
-        // vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity ); // Not needed without prediction
+        vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity ); // Read velocity for prediction
+
+        // Apply prediction if enabled
+        if (vars::aimbot::prediction) {
+            float time_to_target = 0.1f; // Simple fixed prediction time (adjust as needed)
+            w_target_bone_pos = w_target_bone_pos + (v_player_root * time_to_target);
+        }
 
         vector2d s_target_bone_pos;
 

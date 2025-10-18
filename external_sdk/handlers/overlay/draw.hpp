@@ -13,6 +13,7 @@ public:
     void string( ImVec2 pos, const char* text, ImColor color, bool centered );
     void outlined_string( ImVec2 pos, const char* text, ImColor text_color, ImColor outline_color, bool centered );
     void line( ImVec2 start, ImVec2 end, ImColor color, float thickness );
+    void circle( ImVec2 center, float radius, ImColor color, float thickness ); // New: Draw a circle
 } ;
 
 inline c_draw draw;

@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <thread>
+#include <random>
 
 // -- DirectX Related --
 #include <d3d11.h>
