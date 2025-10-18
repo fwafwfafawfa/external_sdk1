@@ -63,6 +63,12 @@ namespace vars
         inline float teleport_offset_z = 3.0f; // Default horizontal offset (in front of target)
         inline uintptr_t selected_player_for_info = 0; // Stores the address of the player selected for detailed info
     }
+
+    namespace anti_afk
+    {
+        inline bool toggled = false;
+        inline float interval = 30.0f; // Seconds between anti-AFK actions
+    }
 }
 
 #include <cmath> // For sqrtf

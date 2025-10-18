@@ -273,6 +273,8 @@ void c_menu::run_main_window( )
             ImGui::Checkbox("Workspace Viewer", &vars::misc::show_workspace_viewer);
             ImGui::SliderFloat("Teleport Offset Y", &vars::misc::teleport_offset_y, -20.0f, 20.0f, "%.1f");
             ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f, "%.1f");
+            ImGui::Checkbox("Anti-AFK", &vars::anti_afk::toggled);
+            ImGui::SliderFloat("AFK Interval", &vars::anti_afk::interval, 5.0f, 300.0f, "%.1f s");
             ImGui::EndTabItem();
         }
 

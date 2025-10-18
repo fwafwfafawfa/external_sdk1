@@ -48,28 +48,43 @@ void c_misc::teleport_to(uintptr_t player_instance)
     }
 
     // Call the more reliable teleport_to_position function
-    teleport_to_position(w_target_pos_final);
-    util.m_print("Teleport to Player: Teleported local player to (%.1f, %.1f, %.1f). WARNING: HIGH DETECTION RISK!", w_target_pos_final.x, w_target_pos_final.y, w_target_pos_final.z);
-}
-
-void c_misc::teleport_to_position(vector target_pos)
-{
-    // Get local player's character model
+    // We need to find p_local_root here as well
     uintptr_t local_player_character_model = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
     if (!local_player_character_model)
     {
+        util.m_print("Teleport to Player: ERROR - Local player character model not found for teleport_to.");
         return;
     }
-
-    // Get local player's HumanoidRootPart address
     auto local_root = core.find_first_child(local_player_character_model, "HumanoidRootPart");
     if (!local_root)
     {
+        util.m_print("Teleport to Player: ERROR - Local HumanoidRootPart not found for teleport_to.");
         return;
     }
     auto p_local_root = driver.read<uintptr_t>(local_root + offsets::Primitive);
     if (!p_local_root)
     {
+        util.m_print("Teleport to Player: ERROR - Local HumanoidRootPart Primitive is NULL for teleport_to.");
+        return;
+    }
+
+    teleport_to_position(p_local_root, w_target_pos_final);
+    util.m_print("Teleport to Player: Teleported local player to (%.1f, %.1f, %.1f). WARNING: HIGH DETECTION RISK!", w_target_pos_final.x, w_target_pos_final.y, w_target_pos_final.z);
+}
+
+void c_misc::teleport_to_position(uintptr_t p_local_root, vector target_pos)
+{
+    if (!p_local_root)
+    {
+        util.m_print("Teleport to Position: ERROR - p_local_root is NULL.");
+        return;
+    }
+
+    util.m_print("Teleport to Position: Attempting to write to 0x%llX with target position (%.1f, %.1f, %.1f)", p_local_root + offsets::Position, target_pos.x, target_pos.y, target_pos.z);
+
+    // Sanity check for target position before writing
+    if (!std::isfinite(target_pos.x) || !std::isfinite(target_pos.y) || !std::isfinite(target_pos.z)) {
+        util.m_print("Teleport to Position: ERROR - Aborting write due to invalid (NaN/Infinity) target position.");
         return;
     }
 
@@ -149,6 +164,35 @@ void c_misc::spectate(uintptr_t player_instance)
     driver.write<vector>(camera_obj + offsets::CameraRotation, cam_rot);
 
     util.m_print("Spectate Player: Moved camera to (%.1f, %.1f, %.1f) with rotation (%.1f, %.1f, %.1f). WARNING: HIGH DETECTION RISK!", w_target_pos.x, w_target_pos.y, w_target_pos.z, cam_rot.x, cam_rot.y, cam_rot.z);
+}
+
+static std::chrono::steady_clock::time_point last_afk_action_time = std::chrono::steady_clock::now();
+
+void c_misc::run_anti_afk()
+{
+    if (!vars::anti_afk::toggled)
+        return;
+
+    auto current_time = std::chrono::steady_clock::now();
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::duration<float>>(current_time - last_afk_action_time).count();
+
+    if (elapsed_time >= vars::anti_afk::interval)
+    {
+        // Simulate a small mouse movement
+        INPUT input = { 0 };
+        input.type = INPUT_MOUSE;
+        input.mi.dx = 1; // Move 1 pixel right
+        input.mi.dy = 1; // Move 1 pixel down
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
+        SendInput(1, &input, sizeof(INPUT));
+
+        input.mi.dx = -1; // Move 1 pixel left
+        input.mi.dy = -1; // Move 1 pixel up
+        SendInput(1, &input, sizeof(INPUT));
+
+        util.m_print("Anti-AFK: Simulated mouse movement.");
+        last_afk_action_time = current_time;
+    }
 }
 
 

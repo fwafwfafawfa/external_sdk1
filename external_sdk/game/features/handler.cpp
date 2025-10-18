@@ -5,6 +5,7 @@
 
 
 #include "../../handlers/vars.hpp"
+#include "../../handlers/misc/misc.hpp" // Include misc.hpp
 #include <chrono>
 
 void c_feature_handler::start( uintptr_t datamodel )
@@ -47,4 +48,5 @@ void c_feature_handler::start( uintptr_t datamodel )
     }
 
     jump_power::run();
-}
+
+    misc.run_anti_afk(); // Call anti-AFK function

@@ -200,7 +200,7 @@ void c_workspace_viewer::draw_properties() {
             }
 
             // Teleport using misc.teleport_to_position
-            misc.teleport_to_position(w_target_pos);
+            misc.teleport_to_position(p_local_root, w_target_pos);
 
         }
     }
