@@ -5,123 +5,97 @@
 #include "../../../addons/kernel/memory.hpp"
 
 // Static variable to track if fly was enabled in the previous frame
-static bool was_fly_enabled_last_frame = false;
+static bool fly_toggled = false; // Renamed from was_fly_enabled_last_frame
 
-void c_fly::run() {
-    uintptr_t local_humanoid = core.get_local_humanoid();
-    if (!local_humanoid) {
-        if (was_fly_enabled_last_frame) {
-            was_fly_enabled_last_frame = false;
-        }
+void c_fly::run()
+{
+    if (!g_main::localplayer)
         return;
-    }
 
-    uintptr_t local_player_character_model = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
-    if (!local_player_character_model) {
-        if (was_fly_enabled_last_frame) {
-            was_fly_enabled_last_frame = false;
-        }
+    if (!vars::fly::toggled) // Use vars::fly::toggled for overall enable/disable
         return;
-    }
 
-    uintptr_t hrp = core.find_first_child(local_player_character_model, "HumanoidRootPart");
-    if (!hrp) {
-        if (was_fly_enabled_last_frame) {
-            was_fly_enabled_last_frame = false;
+    bool should_fly = false;
+
+    if (vars::fly::fly_mode == 0) // Hold mode
+    {
+        should_fly = GetAsyncKeyState(vars::fly::fly_toggle_key);
+    }
+    else if (vars::fly::fly_mode == 1) // Toggle mode
+    {
+        if (GetAsyncKeyState(vars::fly::fly_toggle_key) & 0x1) // Check for key press
+        {
+            fly_toggled = !fly_toggled;
         }
+        should_fly = fly_toggled;
+    }
+
+    if (!should_fly)
         return;
-    }
 
-    uintptr_t hrp_primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
-    if (!hrp_primitive) {
-        if (was_fly_enabled_last_frame) {
-            was_fly_enabled_last_frame = false;
-        }
+    uintptr_t character = core.get_model_instance(g_main::localplayer);
+    if (!character)
         return;
-    }
 
-    if (!vars::fly::toggled) {
-        // If fly is now disabled, reset velocity
-        if (was_fly_enabled_last_frame) {
-            memory->write<vector>(hrp_primitive + offsets::AssemblyLinearVelocity, {0.0f, 0.0f, 0.0f});
-            memory->write<vector>(hrp_primitive + offsets::AssemblyAngularVelocity, {0.0f, 0.0f, 0.0f});
-            was_fly_enabled_last_frame = false;
-        }
+    uintptr_t humanoidRootPart = core.find_first_child(character, "HumanoidRootPart");
+    if (!humanoidRootPart)
         return;
-    }
 
-    // If fly is enabled
-    was_fly_enabled_last_frame = true;
+    uintptr_t primitive = memory->read<uintptr_t>(humanoidRootPart + offsets::Primitive);
+    if (!primitive)
+        return;
 
-    // Ensure HRP is not anchored for movement
-    BYTE anchored_val = memory->read<BYTE>(hrp_primitive + offsets::Anchored);
-    if ((anchored_val & 0x02) != 0) { // Check if Anchored bit is set
-        anchored_val &= ~0x02; // Unset Anchored bit
-        memory->write<BYTE>(hrp_primitive + offsets::Anchored, anchored_val);
-    }
-
-    // Read camera CFrame for movement direction
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
-    if (!workspace) return;
-    uintptr_t camera_ptr = memory->read<uintptr_t>(workspace + offsets::Camera);
-    if (!camera_ptr) return;
-    matrix camera_cframe = memory->read<matrix>(camera_ptr + offsets::CFrame);
+    if (!workspace)
+        return;
 
-    vector current_position = memory->read<vector>(hrp_primitive + offsets::Position);
-    vector move_direction = {0.0f, 0.0f, 0.0f};
-    float speed = vars::fly::speed;
+    uintptr_t Camera = memory->read<uintptr_t>(workspace + offsets::Camera);
+    if (!Camera)
+        return;
+
+    // Vector camPos = memory->read<vector>(Camera + offsets::CameraPos); // Not used in this snippet
+    Matrix3 camCFrame = memory->read<Matrix3>(Camera + offsets::CameraRotation); // Assuming Matrix3 is 3x3 rotation
+
+    vector currentPos = memory->read<vector>(primitive + offsets::Position);
+
+    vector lookVector = vector(-camCFrame.data[2], -camCFrame.data[5], -camCFrame.data[8]);
+    vector rightVector = vector(camCFrame.data[0], camCFrame.data[3], camCFrame.data[6]);
+
+    vector moveDirection(0, 0, 0);
+
+    // This snippet only shows the Position method (fly_method == 0)
+    // We will implement this as the default behavior for now.
 
     // Forward/Backward (W/S)
-    if (GetAsyncKeyState('W') & 0x8000) {
-        move_direction.x -= camera_cframe.m[0][2];
-        move_direction.y -= camera_cframe.m[1][2];
-        move_direction.z -= camera_cframe.m[2][2];
+    if (GetAsyncKeyState('W') & 0x8000)
+    {
+        moveDirection = moveDirection + lookVector;
     }
-    if (GetAsyncKeyState('S') & 0x8000) {
-        move_direction.x += camera_cframe.m[0][2];
-        move_direction.y += camera_cframe.m[1][2];
-        move_direction.z += camera_cframe.m[2][2];
+    if (GetAsyncKeyState('S') & 0x8000)
+    {
+        moveDirection = moveDirection - lookVector;
     }
-
-    // Left/Right (A/D)
-    if (GetAsyncKeyState('A') & 0x8000) {
-        move_direction.x -= camera_cframe.m[0][0];
-        move_direction.y -= camera_cframe.m[1][0];
-        move_direction.z -= camera_cframe.m[2][0];
+    if (GetAsyncKeyState('A') & 0x8000)
+    {
+        moveDirection = moveDirection - rightVector;
     }
-    if (GetAsyncKeyState('D') & 0x8000) {
-        move_direction.x += camera_cframe.m[0][0];
-        move_direction.y += camera_cframe.m[1][0];
-        move_direction.z += camera_cframe.m[2][0];
+    if (GetAsyncKeyState('D') & 0x8000)
+    {
+        moveDirection = moveDirection + rightVector;
+    }
+    if (GetAsyncKeyState(VK_SPACE) & 0x8000)
+    {
+        moveDirection.y += 1.0f;
     }
 
-    // Normalize move_direction if there's horizontal movement
-    if (move_direction.x != 0.0f || move_direction.z != 0.0f) {
-        float magnitude = sqrtf(move_direction.x * move_direction.x + move_direction.y * move_direction.y + move_direction.z * move_direction.z);
-        if (magnitude > 0) {
-            move_direction.x /= magnitude;
-            move_direction.y /= magnitude;
-            move_direction.z /= magnitude;
-        }
+    if (!moveDirection.IsZero())
+    {
+        moveDirection.Normalize();
+        moveDirection = moveDirection * vars::fly::speed;
     }
 
-    // Apply speed to horizontal movement
-    current_position.x += move_direction.x * speed;
-    current_position.y += move_direction.y * speed;
-    current_position.z += move_direction.z * speed;
-
-    // Up/Down (Space/Control)
-    if (GetAsyncKeyState(VK_SPACE) & 0x8000) {
-        current_position.y += speed;
-    }
-    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
-        current_position.y -= speed;
-    }
-
-    // Set LinearVelocity to zero to prevent physics interference
-    memory->write<vector>(hrp_primitive + offsets::AssemblyLinearVelocity, {0.0f, 0.0f, 0.0f});
-    memory->write<vector>(hrp_primitive + offsets::AssemblyAngularVelocity, {0.0f, 0.0f, 0.0f});
-
-    // Write the new position
-    memory->write<vector>(hrp_primitive + offsets::Position, current_position);
+    vector newPos = currentPos + moveDirection;
+    memory->write<vector>(primitive + offsets::Position, newPos);
+    memory->write<bool>(primitive + offsets::CanCollide, false); // Disable collisions
+    memory->write<vector>(primitive + offsets::Velocity, vector(0, 0, 0)); // Zero velocity
 }

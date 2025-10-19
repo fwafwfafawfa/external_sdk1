@@ -26,6 +26,19 @@ struct vector {
         }
         return vector(0, 0, 0);
     }
+
+    bool IsZero() const {
+        return x == 0.0f && y == 0.0f && z == 0.0f;
+    }
+
+    void Normalize() {
+        float mag = magnitude();
+        if (mag > 0) {
+            x /= mag;
+            y /= mag;
+            z /= mag;
+        }
+    }
 };
 
 struct CFrame {
@@ -38,6 +51,14 @@ struct CFrame {
                R00(1), R01(0), R02(0),
                R10(0), R11(1), R12(0),
                R20(0), R21(0), R22(1) {}
+};
+
+struct Matrix3 {
+    float data[9]; // Represents a 3x3 matrix
+
+    Matrix3() {
+        for (int i = 0; i < 9; ++i) data[i] = 0.0f;
+    }
 };
 
 // Now define the vars namespace that uses the vector struct
@@ -59,7 +80,7 @@ namespace vars
     namespace aimbot
     {
         inline bool toggled = true;
-        inline float speed = 10.0f;
+        inline float speed = 1.0f;
         inline float fov = 100.0f;
         inline float deadzone = 5.0f;
         inline bool use_set_cursor_pos = false;
@@ -99,6 +120,8 @@ namespace vars
     {
         inline bool toggled = false;
         inline float speed = 1.0f;
+        inline int fly_toggle_key = 0x51; // Q key
+        inline int fly_mode = 0; // 0 = Hold, 1 = Toggle
     }
 
     namespace misc
