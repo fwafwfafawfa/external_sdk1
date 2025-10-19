@@ -257,7 +257,34 @@ void c_menu::run_main_window( )
         {
             ImGui::Checkbox( "Freecam", &vars::freecam::toggled );
             ImGui::Checkbox( "Noclip", &vars::noclip::toggled );
-            ImGui::Checkbox( "Fly", &vars::fly::toggled );
+            ImGui::Checkbox( "Fly (credits to world_to_client)", &vars::fly::toggled );
+            
+            // Fly Key selection
+            std::string fly_button_text = "Fly Key: " + virtual_key_to_string( vars::fly::fly_toggle_key );
+            static bool awaiting_fly_key_press = false;
+            if ( awaiting_fly_key_press )
+                fly_button_text = "Press a key...";
+
+            if ( ImGui::Button( fly_button_text.c_str( ) ) )
+                awaiting_fly_key_press = true;
+
+            if ( awaiting_fly_key_press )
+            {
+                for ( int i = 1; i < 256; i++ )
+                {
+                    if ( GetAsyncKeyState( i ) & 0x8000 )
+                    {
+                        vars::fly::fly_toggle_key = i;
+                        awaiting_fly_key_press = false;
+                        break;
+                    }
+                }
+            }
+
+            // Fly Mode selection
+            ImGui::RadioButton("Hold", &vars::fly::fly_mode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Toggle", &vars::fly::fly_mode, 1);
 
             ImGui::Separator();
             ImGui::Checkbox("Walkspeed", &vars::speed_hack::toggled);
