@@ -2,6 +2,7 @@
 #include "example_esp/esp.hpp"
 #include "speed_hack/speed.hpp"
 #include "freecam/freecam.hpp"
+#include "fly/fly.hpp"
 
 
 #include "../../handlers/vars.hpp"
@@ -30,7 +31,7 @@ void c_feature_handler::start(uintptr_t datamodel)
     if (!roblox_window || GetForegroundWindow() != roblox_window)
         return;
 
-    matrix viewmatrix = driver.read< matrix >(g_main::v_engine + offsets::viewmatrix);
+    matrix viewmatrix = memory->read< matrix >(g_main::v_engine + offsets::viewmatrix);
 
     if (vars::esp::toggled)
         esp.run_players(viewmatrix);
@@ -48,6 +49,10 @@ void c_feature_handler::start(uintptr_t datamodel)
     }
 
     jump_power::run();
+
+    if (vars::fly::toggled) {
+        fly.run();
+    }
 
     misc.run_anti_afk(); // Call anti-AFK function
 }

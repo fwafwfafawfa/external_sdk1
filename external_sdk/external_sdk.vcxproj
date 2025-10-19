@@ -148,9 +148,10 @@
     <ClCompile Include="addons\imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="addons\imgui\imgui_tables.cpp" />
     <ClCompile Include="addons\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="addons\kernel\driver.cpp" />
+    <ClCompile Include="addons\kernel\memory.cpp" />
     <ClCompile Include="game\core.cpp" />
     <ClCompile Include="game\features\example_esp\esp.cpp" />
+    <ClCompile Include="game\features\fly\fly.cpp" />
     <ClCompile Include="game\features\handler.cpp" />
     <ClCompile Include="game\features\jump_power\jump_power.cpp" />
     <ClCompile Include="game\features\player_info\player_info.cpp" />
@@ -180,9 +181,10 @@
     <ClInclude Include="addons\imgui\imstb_rectpack.h" />
     <ClInclude Include="addons\imgui\imstb_textedit.h" />
     <ClInclude Include="addons\imgui\imstb_truetype.h" />
-    <ClInclude Include="addons\kernel\driver.hpp" />
+    <ClInclude Include="addons\kernel\memory.hpp" />
     <ClInclude Include="game\core.hpp" />
     <ClInclude Include="game\features\example_esp\esp.hpp" />
+    <ClInclude Include="game\features\fly\fly.hpp" />
     <ClInclude Include="game\features\handler.hpp" />
     <ClInclude Include="game\features\jump_power\jump_power.hpp" />
     <ClInclude Include="game\features\player_info\player_info.hpp" />

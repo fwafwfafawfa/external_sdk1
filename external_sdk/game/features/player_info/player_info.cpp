@@ -2,7 +2,7 @@
 #include "../../../handlers/vars.hpp"
 #include "../../../game/offsets/offsets.hpp"
 #include "../../../game/core.hpp"
-#include "../../../addons/kernel/driver.hpp"
+#include "../../../addons/kernel/memory.hpp"
 #include "../../../handlers/utility/utility.hpp"
 
 void c_player_info::draw_player_info(uintptr_t player_instance)
@@ -22,7 +22,7 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
     ImGui::Text("Class Name: %s", player_classname.c_str());
 
     // User ID
-    uintptr_t user_id = driver.read<uintptr_t>(player_instance + offsets::UserId);
+    uintptr_t user_id = memory->read<uintptr_t>(player_instance + offsets::UserId);
     ImGui::Text("User ID: %llu", user_id);
 
     ImGui::Separator();
@@ -37,22 +37,22 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
         if (humanoid)
         {
             ImGui::Text("Humanoid Address: 0x%llX", humanoid);
-            float health = driver.read<float>(humanoid + offsets::Health);
-            float max_health = driver.read<float>(humanoid + offsets::MaxHealth);
+            float health = memory->read<float>(humanoid + offsets::Health);
+            float max_health = memory->read<float>(humanoid + offsets::MaxHealth);
             ImGui::Text("Health: %.1f / %.1f", health, max_health);
             ImGui::ProgressBar(health / max_health, ImVec2(-FLT_MIN, 0.0f), std::to_string((int)health).c_str());
 
-            float walkspeed = driver.read<float>(humanoid + offsets::Walkspeed);
+            float walkspeed = memory->read<float>(humanoid + offsets::Walkspeed);
             ImGui::Text("WalkSpeed: %.1f", walkspeed);
 
-            float jumppower = driver.read<float>(humanoid + offsets::JumpPower);
+            float jumppower = memory->read<float>(humanoid + offsets::JumpPower);
             ImGui::Text("JumpPower: %.1f", jumppower);
 
             // Humanoid State
-            uintptr_t humanoid_state_ptr = driver.read<uintptr_t>(humanoid + offsets::HumanoidState);
+            uintptr_t humanoid_state_ptr = memory->read<uintptr_t>(humanoid + offsets::HumanoidState);
             if (humanoid_state_ptr)
             {
-                uintptr_t humanoid_state_id = driver.read<uintptr_t>(humanoid_state_ptr + offsets::HumanoidStateId);
+                uintptr_t humanoid_state_id = memory->read<uintptr_t>(humanoid_state_ptr + offsets::HumanoidStateId);
                 // This ID needs to be mapped to a readable string, which is game-specific.
                 // For now, just display the ID.
                 ImGui::Text("Humanoid State ID: %llu", humanoid_state_id);
@@ -63,12 +63,12 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
         if (hrp)
         {
             ImGui::Text("HumanoidRootPart Address: 0x%llX", hrp);
-            uintptr_t p_hrp = driver.read<uintptr_t>(hrp + offsets::Primitive);
+            uintptr_t p_hrp = memory->read<uintptr_t>(hrp + offsets::Primitive);
             if (p_hrp)
             {
-                vector pos = driver.read<vector>(p_hrp + offsets::Position);
+                vector pos = memory->read<vector>(p_hrp + offsets::Position);
                 ImGui::Text("Position: (%.1f, %.1f, %.1f)", pos.x, pos.y, pos.z);
-                vector vel = driver.read<vector>(p_hrp + offsets::Velocity);
+                vector vel = memory->read<vector>(p_hrp + offsets::Velocity);
                 ImGui::Text("Velocity: (%.1f, %.1f, %.1f)", vel.x, vel.y, vel.z);
             }
         }

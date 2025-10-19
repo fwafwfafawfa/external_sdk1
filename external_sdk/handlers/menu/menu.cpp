@@ -257,6 +257,7 @@ void c_menu::run_main_window( )
         {
             ImGui::Checkbox( "Freecam", &vars::freecam::toggled );
             ImGui::Checkbox( "Noclip", &vars::noclip::toggled );
+            ImGui::Checkbox( "Fly", &vars::fly::toggled );
 
             ImGui::Separator();
             ImGui::Checkbox("Walkspeed", &vars::speed_hack::toggled);

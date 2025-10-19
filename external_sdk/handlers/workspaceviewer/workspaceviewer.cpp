@@ -45,10 +45,10 @@ void c_workspace_viewer::draw_selected_instance_highlight() {
         }
     }
 
-    uintptr_t primitive = driver.read<uintptr_t>(instance_to_highlight + offsets::Primitive);
+    uintptr_t primitive = memory->read<uintptr_t>(instance_to_highlight + offsets::Primitive);
     if (!primitive) return;
 
-    world_pos = driver.read<vector>(primitive + offsets::Position);
+    world_pos = memory->read<vector>(primitive + offsets::Position);
 
     // Convert world position to screen position
     vector2d screen_pos;
@@ -59,13 +59,13 @@ void c_workspace_viewer::draw_selected_instance_highlight() {
     uintptr_t local_player_obj = g_main::localplayer; // This is the Player object
     if (!local_player_obj) return;
 
-    uintptr_t player_mouse = driver.read<uintptr_t>(local_player_obj + offsets::PlayerMouse);
+    uintptr_t player_mouse = memory->read<uintptr_t>(local_player_obj + offsets::PlayerMouse);
     if (!player_mouse) return;
 
-    camera_obj = driver.read<uintptr_t>(player_mouse + offsets::Camera);
+    camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Camera);
     if (!camera_obj) return;
 
-    view_matrix = driver.read<matrix>(g_main::v_engine + offsets::viewmatrix);
+    view_matrix = memory->read<matrix>(g_main::v_engine + offsets::viewmatrix);
 
     if (core.world_to_screen(world_pos, screen_pos, view_matrix)) {
         float screen_width = core.get_screen_width();
@@ -100,10 +100,10 @@ void c_workspace_viewer::draw_properties() {
     ImGui::Separator();
 
     // Common Properties
-    bool anchored = driver.read<bool>(selected_instance + offsets::Anchored);
+    bool anchored = memory->read<bool>(selected_instance + offsets::Anchored);
     ImGui::Checkbox("Anchored", &anchored);
 
-    vector position = driver.read<vector>(selected_instance + offsets::Position);
+    vector position = memory->read<vector>(selected_instance + offsets::Position);
     ImGui::Text("Position: %.3f, %.3f, %.3f", position.x, position.y, position.z);
 
     std::string class_name = core.get_instance_classname(selected_instance);
@@ -135,7 +135,7 @@ void c_workspace_viewer::draw_properties() {
             }
             util.m_print("Teleport: Local HumanoidRootPart found: 0x%llX", hrp_temp);
 
-            uintptr_t p_local_root = driver.read<uintptr_t>(hrp_temp + offsets::Primitive);
+            uintptr_t p_local_root = memory->read<uintptr_t>(hrp_temp + offsets::Primitive);
             if (!p_local_root) {
                 util.m_print("Teleport: Could not teleport: Local HumanoidRootPart Primitive not found.");
                 return;
@@ -169,18 +169,18 @@ void c_workspace_viewer::draw_properties() {
                 }
 
                 if (primary_part) {
-                    uintptr_t primary_part_primitive = driver.read<uintptr_t>(primary_part + offsets::Primitive);
+                    uintptr_t primary_part_primitive = memory->read<uintptr_t>(primary_part + offsets::Primitive);
                     if (primary_part_primitive) {
-                        w_target_pos = driver.read<vector>(primary_part_primitive + offsets::Position);
+                        w_target_pos = memory->read<vector>(primary_part_primitive + offsets::Position);
                         position_found = true;
                     }
                 }
             }
             else if (target_class_name.find("Part") != std::string::npos) {
                 // If it's a Part (or subclass like BasePart), use its Primitive
-                uintptr_t target_primitive = driver.read<uintptr_t>(selected_instance + offsets::Primitive);
+                uintptr_t target_primitive = memory->read<uintptr_t>(selected_instance + offsets::Primitive);
                 if (target_primitive) {
-                    w_target_pos = driver.read<vector>(target_primitive + offsets::Position);
+                    w_target_pos = memory->read<vector>(target_primitive + offsets::Position);
                     position_found = true;
                 }
             }

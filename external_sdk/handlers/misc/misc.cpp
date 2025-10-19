@@ -7,6 +7,8 @@
 #define M_PI 3.14159265358979323846f
 #endif
 
+#include "../../addons/kernel/memory.hpp"
+
 void c_misc::teleport_to(uintptr_t player_instance)
 {
     util.m_print("Teleport to Player: Attempting to teleport to 0x%llX", player_instance);
@@ -26,13 +28,13 @@ void c_misc::teleport_to(uintptr_t player_instance)
         util.m_print("Teleport to Player: Failed to get target HumanoidRootPart for model 0x%llX.", target_model);
         return;
     }
-    auto p_target_root = driver.read<uintptr_t>(target_root + offsets::Primitive);
+    auto p_target_root = memory->read<uintptr_t>(target_root + offsets::Primitive);
     if (!p_target_root)
     {
         util.m_print("Teleport to Player: Failed to get target Primitive for HumanoidRootPart 0x%llX.", target_root);
         return;
     }
-    vector w_target_pos_raw = driver.read<vector>(p_target_root + offsets::Position);
+    vector w_target_pos_raw = memory->read<vector>(p_target_root + offsets::Position);
     util.m_print("Teleport to Player: Raw target position: (%.1f, %.1f, %.1f)", w_target_pos_raw.x, w_target_pos_raw.y, w_target_pos_raw.z);
 
     // Apply configurable offsets
@@ -61,7 +63,7 @@ void c_misc::teleport_to(uintptr_t player_instance)
         util.m_print("Teleport to Player: ERROR - Local HumanoidRootPart not found for teleport_to.");
         return;
     }
-    auto p_local_root = driver.read<uintptr_t>(local_root + offsets::Primitive);
+    auto p_local_root = memory->read<uintptr_t>(local_root + offsets::Primitive);
     if (!p_local_root)
     {
         util.m_print("Teleport to Player: ERROR - Local HumanoidRootPart Primitive is NULL for teleport_to.");
@@ -89,7 +91,7 @@ void c_misc::teleport_to_position(uintptr_t p_local_root, vector target_pos)
     }
 
     // Write target position to local player's position
-    driver.write<vector>(p_local_root + offsets::Position, target_pos);
+    memory->write<vector>(p_local_root + offsets::Position, target_pos);
 }
 
 void c_misc::spectate(uintptr_t player_instance)
@@ -111,13 +113,13 @@ void c_misc::spectate(uintptr_t player_instance)
         util.m_print("Spectate Player: Failed to get target HumanoidRootPart.");
         return;
     }
-    auto p_target_root = driver.read<uintptr_t>(target_root + offsets::Primitive);
+    auto p_target_root = memory->read<uintptr_t>(target_root + offsets::Primitive);
     if (!p_target_root)
     {
         util.m_print("Spectate Player: Failed to get target Primitive.");
         return;
     }
-    vector w_target_pos = driver.read<vector>(p_target_root + offsets::Position);
+    vector w_target_pos = memory->read<vector>(p_target_root + offsets::Position);
 
     // Find the local player's camera object
     // This is a common pattern: DataModel -> Workspace -> CurrentCamera
@@ -130,14 +132,14 @@ void c_misc::spectate(uintptr_t player_instance)
         return;
     }
 
-    uintptr_t player_mouse = driver.read<uintptr_t>(local_player_obj + offsets::PlayerMouse);
+    uintptr_t player_mouse = memory->read<uintptr_t>(local_player_obj + offsets::PlayerMouse);
     if (!player_mouse)
     {
         util.m_print("Spectate Player: PlayerMouse object not found.");
         return;
     }
 
-    uintptr_t camera_obj = driver.read<uintptr_t>(player_mouse + offsets::Camera);
+    uintptr_t camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Camera);
     if (!camera_obj)
     {
         util.m_print("Spectate Player: Camera object not found.");
@@ -146,11 +148,11 @@ void c_misc::spectate(uintptr_t player_instance)
     util.m_print("Spectate Player: Camera object found at 0x%llX", camera_obj); // DEBUG
 
     // Write target position to camera's position
-    driver.write<vector>(camera_obj + offsets::CameraPos, w_target_pos);
+    memory->write<vector>(camera_obj + offsets::CameraPos, w_target_pos);
 
     // Also attempt to set camera rotation to look at the target
     // This is a simplified calculation, assuming target is at eye level
-    vector current_cam_pos = driver.read<vector>(camera_obj + offsets::CameraPos);
+    vector current_cam_pos = memory->read<vector>(camera_obj + offsets::CameraPos);
     util.m_print("Spectate Debug: Current Camera Pos: (%.1f, %.1f, %.1f)", current_cam_pos.x, current_cam_pos.y, current_cam_pos.z); // DEBUG
     util.m_print("Spectate Debug: Target Pos: (%.1f, %.1f, %.1f)", w_target_pos.x, w_target_pos.y, w_target_pos.z); // DEBUG
 
@@ -161,7 +163,7 @@ void c_misc::spectate(uintptr_t player_instance)
     float pitch = atan2f(look_dir.y, sqrtf(look_dir.x * look_dir.x + look_dir.z * look_dir.z)) * (180.0f / M_PI);
 
     vector cam_rot = {pitch, yaw, 0.0f}; // Assuming X is Pitch, Y is Yaw, Z is Roll (0)
-    driver.write<vector>(camera_obj + offsets::CameraRotation, cam_rot);
+    memory->write<vector>(camera_obj + offsets::CameraRotation, cam_rot);
 
     util.m_print("Spectate Player: Moved camera to (%.1f, %.1f, %.1f) with rotation (%.1f, %.1f, %.1f). WARNING: HIGH DETECTION RISK!", w_target_pos.x, w_target_pos.y, w_target_pos.z, cam_rot.x, cam_rot.y, cam_rot.z);
 }
@@ -229,5 +231,3 @@ void c_misc::run_anti_afk()
         last_afk_action_time = current_time;
     }
 }
-
-

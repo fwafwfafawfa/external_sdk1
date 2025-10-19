@@ -95,6 +95,12 @@ namespace vars
         inline float default_value = 50.0f;
     }
 
+    namespace fly
+    {
+        inline bool toggled = false;
+        inline float speed = 1.0f;
+    }
+
     namespace misc
     {
         inline bool show_workspace_viewer = false;

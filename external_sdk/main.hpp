@@ -30,7 +30,7 @@
 #include "handlers/misc/misc.hpp" // Include misc.hpp
 
 // -- Kernel --
-#include "addons/kernel/driver.hpp"
+#include "addons/kernel/memory.hpp"
 
 // -- ImGui Rendering --
 #include "addons/imgui/imgui.h"

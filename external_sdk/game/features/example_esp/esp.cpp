@@ -1,6 +1,6 @@
 #include "esp.hpp"
 #include "../game/core.hpp"
-#include "../addons/kernel/driver.hpp"
+#include "../addons/kernel/memory.hpp"
 #include "../game/offsets/offsets.hpp"
 #include "../handlers/overlay/draw.hpp"
 #include "../addons/imgui/imgui.h"
@@ -27,8 +27,8 @@ void c_esp::run_players( matrix viewmatrix )
         if ( !humanoid )
             continue;
 
-        float health = driver.read< float >( humanoid + offsets::Health );
-        float max_health = driver.read< float >( humanoid + offsets::MaxHealth );
+        float health = memory->read< float >( humanoid + offsets::Health );
+        float max_health = memory->read< float >( humanoid + offsets::MaxHealth );
 
         if ( !health )
             continue;
@@ -40,7 +40,7 @@ void c_esp::run_players( matrix viewmatrix )
         if ( !player_root )
             continue;
 
-        auto p_player_root = driver.read< uintptr_t >( player_root + offsets::Primitive );
+        auto p_player_root = memory->read< uintptr_t >( player_root + offsets::Primitive );
         if ( !p_player_root )
             continue;
 
@@ -48,7 +48,7 @@ void c_esp::run_players( matrix viewmatrix )
         if ( !player_head )
             continue;
 
-        auto p_player_head = driver.read< uintptr_t >( player_head + offsets::Primitive );
+        auto p_player_head = memory->read< uintptr_t >( player_head + offsets::Primitive );
         if ( !p_player_head )
             continue;
 
@@ -56,8 +56,8 @@ void c_esp::run_players( matrix viewmatrix )
         if ( !player_name.c_str( ) )
             continue;
 
-        vector w_player_root = driver.read< vector >( p_player_root + offsets::Position );
-        vector w_player_head = driver.read< vector >( p_player_head + offsets::Position );
+        vector w_player_root = memory->read< vector >( p_player_root + offsets::Position );
+        vector w_player_head = memory->read< vector >( p_player_head + offsets::Position );
 
         vector2d s_player_root;
         if ( !core.world_to_screen( w_player_root, s_player_root, viewmatrix ) )
@@ -106,10 +106,10 @@ void c_esp::run_players( matrix viewmatrix )
                 auto local_player_root = core.find_first_child(local_player_character_model, "HumanoidRootPart");
                 if (local_player_root)
                 {
-                    auto p_local_player_root = driver.read< uintptr_t >( local_player_root + offsets::Primitive );
+                    auto p_local_player_root = memory->read< uintptr_t >( local_player_root + offsets::Primitive );
                     if (p_local_player_root)
                     {
-                        vector w_local_player_root = driver.read< vector >( p_local_player_root + offsets::Position );
+                        vector w_local_player_root = memory->read< vector >( p_local_player_root + offsets::Position );
 
                         // Calculate distance to target player's HumanoidRootPart
                         float distance = sqrtf(
@@ -173,10 +173,10 @@ void c_esp::run_players( matrix viewmatrix )
                 uintptr_t bone_part = core.find_first_child(model, bone_info.name);
                 if (bone_part)
                 {
-                    uintptr_t p_bone_part = driver.read<uintptr_t>(bone_part + offsets::Primitive);
+                    uintptr_t p_bone_part = memory->read<uintptr_t>(bone_part + offsets::Primitive);
                     if (p_bone_part)
                     {
-                        vector w_bone_pos = driver.read<vector>(p_bone_part + offsets::Position);
+                        vector w_bone_pos = memory->read<vector>(p_bone_part + offsets::Position);
                         bone_world_positions[bone_info.name] = w_bone_pos;
 
                         vector2d s_bone_pos;
@@ -245,17 +245,17 @@ void c_esp::run_aimbot(matrix viewmatrix)
                     auto humanoid = core.find_first_child_class(model, "Humanoid");
                     if (humanoid)
                     {
-                        float health = driver.read< float >(humanoid + offsets::Health);
+                                float health = memory->read< float >( humanoid + offsets::Health );
                         if (health > 0.0f)
                         {
                             const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
                             auto target_bone = core.find_first_child(model, target_bone_name);
                             if (target_bone)
                             {
-                                auto p_target_bone = driver.read< uintptr_t >(target_bone + offsets::Primitive);
+                                auto p_target_bone = memory->read< uintptr_t >(target_bone + offsets::Primitive);
                                 if (p_target_bone)
                                 {
-                                    vector w_target_bone_pos = driver.read< vector >(p_target_bone + offsets::Position);
+                                    vector w_target_bone_pos = memory->read< vector >(p_target_bone + offsets::Position);
                                     vector2d s_target_bone_pos;
                                     if (core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
                                     {
@@ -291,7 +291,7 @@ void c_esp::run_aimbot(matrix viewmatrix)
             if (!player || player == g_main::localplayer)
                 continue;
 
-            uintptr_t player_team = driver.read<uintptr_t>(player + offsets::Team);
+            uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
             if (player_team == g_main::localplayer_team && player_team != 0)
                 continue;
 
@@ -303,8 +303,7 @@ void c_esp::run_aimbot(matrix viewmatrix)
             if (!humanoid)
                 continue;
 
-            float health = driver.read< float >(humanoid + offsets::Health);
-            if (health <= 0.0f) // Skip dead players
+                                    float health = memory->read< float >(humanoid + offsets::Health);            if (health <= 0.0f) // Skip dead players
                 continue;
 
             // Get HumanoidRootPart for velocity
@@ -312,7 +311,7 @@ void c_esp::run_aimbot(matrix viewmatrix)
             if (!player_root)
                 continue;
 
-            auto p_player_root = driver.read< uintptr_t >(player_root + offsets::Primitive);
+            auto p_player_root = memory->read< uintptr_t >(player_root + offsets::Primitive);
             if (!p_player_root)
                 continue;
 
@@ -321,12 +320,12 @@ void c_esp::run_aimbot(matrix viewmatrix)
             auto target_bone = core.find_first_child(model, target_bone_name);
             if (!target_bone)
                 continue;
-            auto p_target_bone = driver.read< uintptr_t >(target_bone + offsets::Primitive);
+            auto p_target_bone = memory->read< uintptr_t >(target_bone + offsets::Primitive);
             if (!p_target_bone)
                 continue;
 
-            vector w_target_bone_pos = driver.read< vector >(p_target_bone + offsets::Position);
-            vector v_player_root = driver.read< vector >(p_player_root + offsets::Velocity); // Read velocity for prediction
+            vector w_target_bone_pos = memory->read< vector >(p_target_bone + offsets::Position);
+                    vector v_player_root = memory->read< vector >( p_player_root + offsets::Velocity ); // Read velocity for prediction
 
             // Apply prediction if enabled
             if (vars::aimbot::prediction) {
@@ -359,14 +358,14 @@ void c_esp::run_aimbot(matrix viewmatrix)
 
         // Get HumanoidRootPart for velocity again for the final aim
         auto player_root = core.find_first_child( model, "HumanoidRootPart" );
-        auto p_player_root = driver.read< uintptr_t >( player_root + offsets::Primitive );
-        vector v_player_root = driver.read< vector >( p_player_root + offsets::Velocity );
+        auto p_player_root = memory->read< uintptr_t >( player_root + offsets::Primitive );
+        vector v_player_root = memory->read< vector >( p_player_root + offsets::Velocity );
 
         // Determine target bone based on aimbot_hitbox setting for final aim
         const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
         auto target_bone = core.find_first_child( model, target_bone_name );
-        auto p_target_bone = driver.read< uintptr_t >( target_bone + offsets::Primitive );
-        vector w_target_bone_pos = driver.read< vector >( p_target_bone + offsets::Position );
+        auto p_target_bone = memory->read< uintptr_t >( target_bone + offsets::Primitive );
+        vector w_target_bone_pos = memory->read< vector >( p_target_bone + offsets::Position );
 
         vector2d s_target_bone_pos;
 

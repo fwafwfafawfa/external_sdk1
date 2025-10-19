@@ -2,7 +2,7 @@
 
 void reinitialize_game_pointers()
 {
-    auto base_address = driver.find_image();
+    auto base_address = memory->find_image();
     if (!base_address) {
         util.m_print("Failed to find base address.");
         return;
@@ -13,7 +13,7 @@ void reinitialize_game_pointers()
 
     uintptr_t fake_datamodel_pointer = 0;
     for (int i = 0; i < 10; ++i) {
-        fake_datamodel_pointer = driver.read<uintptr_t>(base_address + offsets::FakeDataModelPointer);
+        fake_datamodel_pointer = memory->read<uintptr_t>(base_address + offsets::FakeDataModelPointer);
         if (fake_datamodel_pointer) {
             break;
         }
@@ -26,13 +26,13 @@ void reinitialize_game_pointers()
         return;
     }
 
-    g_main::datamodel = driver.read<uintptr_t>(fake_datamodel_pointer + offsets::FakeDataModelToDataModel);
+    g_main::datamodel = memory->read<uintptr_t>(fake_datamodel_pointer + offsets::FakeDataModelToDataModel);
     if (!g_main::datamodel) {
         util.m_print("Failed to find datamodel.");
         return;
     }
 
-    g_main::v_engine = driver.read<uintptr_t>(base_address + offsets::VisualEnginePointer);
+    g_main::v_engine = memory->read<uintptr_t>(base_address + offsets::VisualEnginePointer);
     if (!g_main::v_engine) {
         util.m_print("Failed to find visual engine.");
         return;
@@ -44,19 +44,19 @@ void reinitialize_game_pointers()
         return;
     }
 
-    g_main::localplayer = driver.read<uintptr_t>(players_instance + offsets::LocalPlayer);
+    g_main::localplayer = memory->read<uintptr_t>(players_instance + offsets::LocalPlayer);
     if (!g_main::localplayer) {
         util.m_print("Failed to find local player.");
         return;
     }
 
-    g_main::localplayer_team = driver.read<uintptr_t>(g_main::localplayer + offsets::Team);
+    g_main::localplayer_team = memory->read<uintptr_t>(g_main::localplayer + offsets::Team);
     if (!g_main::localplayer_team) {
         util.m_print("Failed to find local player team.");
         return;
     }
 
-    auto place_id = driver.read<uintptr_t>(g_main::datamodel + offsets::PlaceId);
+    auto place_id = memory->read<uintptr_t>(g_main::datamodel + offsets::PlaceId);
 
     util.m_print("Addresses:");
     util.m_print("Base Address: 0x%llX", base_address);
@@ -70,23 +70,14 @@ void reinitialize_game_pointers()
 
 int main( )
 {
-    auto process = driver.find_process( "RobloxPlayerBeta.exe" );
+    memory = new c_memory( "RobloxPlayerBeta.exe" );
 
-    if ( !driver.find_driver( ) )
-    {
-        util.m_print( "Failed to find driver, load it using a mapper or try restarting your PC." );
-        std::cin.get( );
-        return 0;
-    }
-
-    if ( !process )
+    if ( !memory )
     {
         util.m_print( "Failed to find Roblox, run the game." );
         std::cin.get( );
         return 0;
     }
-
-    util.m_print( "Process ID: %d", process );
 
     // reinitialize_game_pointers(); // This is now handled by the rescan thread in the main loop
 

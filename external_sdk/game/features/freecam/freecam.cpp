@@ -62,7 +62,7 @@ void c_freecam::run(float dt) {
         }
         return;
     }
-    uintptr_t camera_ptr = driver.read<uintptr_t>(workspace + offsets::Camera);
+    uintptr_t camera_ptr = memory->read<uintptr_t>(workspace + offsets::Camera);
     if (!camera_ptr) {
         if (rotating) {
             ShowCursor(true);
@@ -73,7 +73,7 @@ void c_freecam::run(float dt) {
 
     if (!enabled) {
         if (original_subject != 0) {
-            driver.write<uintptr_t>(camera_ptr + offsets::CameraSubject, original_subject);
+            memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, original_subject);
             original_subject = 0;
             if (rotating) {
                 ShowCursor(true);
@@ -84,11 +84,11 @@ void c_freecam::run(float dt) {
     }
 
     if (original_subject == 0) {
-        original_subject = driver.read<uintptr_t>(camera_ptr + offsets::CameraSubject);
-        driver.write<uintptr_t>(camera_ptr + offsets::CameraSubject, 0);
+        original_subject = memory->read<uintptr_t>(camera_ptr + offsets::CameraSubject);
+        memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, 0);
     }
 
-    matrix current_cframe = driver.read<matrix>(camera_ptr + offsets::CFrame);
+    matrix current_cframe = memory->read<matrix>(camera_ptr + offsets::CFrame);
     matrix final_cframe = current_cframe;
 
     // --- Rotation ---
@@ -148,5 +148,5 @@ void c_freecam::run(float dt) {
 
     // --- Write to game ---
     matrix lerped_frame = lerp_matrix(current_cframe, final_cframe, 0.3f);
-    driver.write<matrix>(camera_ptr + offsets::CFrame, lerped_frame);
+    memory->write<matrix>(camera_ptr + offsets::CFrame, lerped_frame);
 }

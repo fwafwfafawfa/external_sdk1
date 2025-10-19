@@ -2,7 +2,7 @@
 #include "../../../handlers/vars.hpp"
 #include "../../../game/offsets/offsets.hpp"
 #include "../../../game/core.hpp"
-#include "../../../addons/kernel/driver.hpp"
+#include "../../../addons/kernel/memory.hpp"
 
 namespace jump_power
 {
@@ -22,11 +22,11 @@ namespace jump_power
             {
                 util.m_print("Jump Power: Toggled ON. Setting to %.1f", vars::jump_power::value);
             }
-            driver.write<float>(humanoid_ptr + offsets::JumpPower, vars::jump_power::value);
+            memory->write<float>(humanoid_ptr + offsets::JumpPower, vars::jump_power::value);
         }
         else if (last_toggled_state) // If it was on, but now is off, reset to default
         {
-            driver.write<float>(humanoid_ptr + offsets::JumpPower, vars::jump_power::default_value);
+            memory->write<float>(humanoid_ptr + offsets::JumpPower, vars::jump_power::default_value);
             util.m_print("Jump Power: Toggled OFF. Reset to %.1f", vars::jump_power::default_value);
         }
 

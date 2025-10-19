@@ -2,7 +2,7 @@
 
 #include "../../game/core.hpp" // Explicitly include core.hpp first
 #include "../../main.hpp"
-#include "../../addons/kernel/driver.hpp"
+#include "../../addons/kernel/memory.hpp"
 #include "../../game/offsets/offsets.hpp"
 #include "../utility/utility.hpp"
 

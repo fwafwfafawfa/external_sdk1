@@ -19,7 +19,7 @@ std::string c_core::read_string ( uintptr_t address )
     str.reserve ( 204 );
 
     while ( offset < 200 ) {
-        character = driver.read < char > ( address + offset );
+        character = memory->read < char > ( address + offset );
 
         if ( character == 0 )
             break;
@@ -33,10 +33,10 @@ std::string c_core::read_string ( uintptr_t address )
 
 std::string c_core::length_read_string ( uintptr_t string ) 
 {
-    const auto length = driver.read < int > ( string + offsets::ClassDescriptor );
+    const auto length = memory->read < int > ( string + offsets::ClassDescriptor );
 
     if ( length >= 16u ) {
-        const auto new_ptr = driver.read < uintptr_t > ( string );
+        const auto new_ptr = memory->read < uintptr_t > ( string );
         return read_string ( new_ptr );
     }
     return read_string ( string );
@@ -44,14 +44,14 @@ std::string c_core::length_read_string ( uintptr_t string )
 
 std::string c_core::get_instance_name ( uintptr_t instance_address ) 
 {
-    const auto get_ptr = driver.read < uintptr_t > ( instance_address + offsets::Name );
+    const auto get_ptr = memory->read < uintptr_t > ( instance_address + offsets::Name );
     return get_ptr ? length_read_string ( get_ptr ) : "???";
 }
 
 std::string c_core::get_instance_classname ( uintptr_t instance_address ) 
 {
-    const auto ptr = driver.read < uintptr_t > ( instance_address + offsets::ClassDescriptor );
-    const auto ptr2 = driver.read < uintptr_t > ( ptr + offsets::ClassDescriptorToClassName );
+    const auto ptr = memory->read < uintptr_t > ( instance_address + offsets::ClassDescriptor );
+    const auto ptr2 = memory->read < uintptr_t > ( ptr + offsets::ClassDescriptorToClassName );
     return ptr2 ? read_string ( ptr2 ) : "???";
 }
 
@@ -68,15 +68,15 @@ uintptr_t c_core::find_first_child ( uintptr_t instance_address, const std::stri
 
     if ( children.empty() || now - update_time > std::chrono::seconds ( 2 ) ) {
         children.clear();
-            auto start = driver.read < uintptr_t > ( instance_address + offsets::Children );
+            auto start = memory->read < uintptr_t > ( instance_address + offsets::Children );
             if ( !start ) return 0;
 
-            auto end = driver.read < uintptr_t > ( start + offsets::ChildrenEnd );
-            auto child_array = driver.read < uintptr_t > ( start );
+            auto end = memory->read < uintptr_t > ( start + offsets::ChildrenEnd );
+            auto child_array = memory->read < uintptr_t > ( start );
             if ( !child_array || child_array >= end ) return 0;
 
             for ( uintptr_t current = child_array; current < end; current += 16 ) {
-                auto child_instance = driver.read < uintptr_t > ( current );
+                auto child_instance = memory->read < uintptr_t > ( current );
                 if ( !child_instance ) continue;
                 children.emplace_back ( child_instance, get_instance_name ( child_instance ) );
             }
@@ -104,15 +104,15 @@ uintptr_t c_core::find_first_child_class( uintptr_t instance_address, const std:
 
     if ( children.empty() || now - update_time > std::chrono::seconds ( 2 ) ) {
         children.clear();
-            auto start = driver.read < uintptr_t > ( instance_address + offsets::Children );
+            auto start = memory->read < uintptr_t > ( instance_address + offsets::Children );
             if ( !start ) return 0;
 
-            auto end = driver.read < uintptr_t > ( start + offsets::ChildrenEnd );
-            auto child_array = driver.read < uintptr_t > ( start );
+            auto end = memory->read < uintptr_t > ( start + offsets::ChildrenEnd );
+            auto child_array = memory->read < uintptr_t > ( start );
             if ( !child_array || child_array >= end ) return 0;
 
             for ( uintptr_t current = child_array; current < end; current += 16 ) {
-                auto child_instance = driver.read < uintptr_t > ( current );
+                auto child_instance = memory->read < uintptr_t > ( current );
                 if ( !child_instance ) continue;
                 children.emplace_back ( child_instance, get_instance_classname ( child_instance ) );
             }
@@ -129,7 +129,7 @@ uintptr_t c_core::find_first_child_class( uintptr_t instance_address, const std:
 
 uintptr_t c_core::get_model_instance ( uintptr_t instance_address ) 
 {
-    return driver.read < uintptr_t > ( instance_address + offsets::ModelInstance );
+    return memory->read < uintptr_t > ( instance_address + offsets::ModelInstance );
 }
 
 std::vector < uintptr_t > c_core::children ( uintptr_t instance_address ) 
@@ -137,12 +137,15 @@ std::vector < uintptr_t > c_core::children ( uintptr_t instance_address )
     std::vector < uintptr_t > container;
     if ( !instance_address ) return container;
 
-    auto start = driver.read < uintptr_t > ( instance_address + offsets::Children );
+    auto start = memory->read < uintptr_t > ( instance_address + offsets::Children );
     if ( !start ) return container;
 
-    auto end = driver.read < uintptr_t > ( start + offsets::ChildrenEnd );
-    for ( auto instances = driver.read < uintptr_t > ( start ); instances != end; instances += 16 ) {
-        container.emplace_back ( driver.read < uintptr_t > ( instances ) );
+    auto end = memory->read < uintptr_t > ( start + offsets::ChildrenEnd );
+    auto child_array = memory->read<uintptr_t>(start);
+    if ( !child_array || child_array >= end ) return container;
+
+    for ( uintptr_t current = child_array; current < end; current += 16 ) {
+        container.emplace_back ( memory->read < uintptr_t > ( current ) );
     }
     return container;
 }
