@@ -1,5 +1,7 @@
 #include "menu.hpp"
+#include <cstdlib>
 #include "../vars.hpp"
+#include "../themes/theme.hpp"
 #include "../../game/features/player_info/player_info.hpp"
 
 // Helper function to convert virtual key codes to strings
@@ -161,7 +163,7 @@ void c_menu::run_main_window( )
     if ( !this->is_initialized )
         this->setup_main_window( );
 
-    ImGui::Begin( "Made by Buko0365(PRE ALPHA VER 3)" );
+    ImGui::Begin( "Made by Buko0365(PRE ALPHA VER 6)" );
 
     if (ImGui::BeginTabBar("##Tabs"))
     {
@@ -258,6 +260,7 @@ void c_menu::run_main_window( )
             ImGui::Checkbox( "Freecam", &vars::freecam::toggled );
             ImGui::Checkbox( "Noclip", &vars::noclip::toggled );
             ImGui::Checkbox( "Fly (credits to world_to_client)", &vars::fly::toggled );
+            ImGui::SliderFloat("Fly Speed", &vars::fly::speed, 0.1f, 2.0f);
             
             // Fly Key selection
             std::string fly_button_text = "Fly Key: " + virtual_key_to_string( vars::fly::fly_toggle_key );
@@ -292,6 +295,8 @@ void c_menu::run_main_window( )
 
             ImGui::Separator();
             ImGui::Checkbox("Jump Power", &vars::jump_power::toggled);
+            ImGui::Checkbox("Infinite Jump", &vars::infinite_jump::toggled);
+            ImGui::SliderFloat("Infinite Jump Power", &vars::infinite_jump::jump_power_value, 50.0f, 5000.0f);
             ImGui::SliderFloat("Jump Power Value", &vars::jump_power::value, 0.0f, 500.0f);
             ImGui::SliderFloat("Jump Power Default", &vars::jump_power::default_value, 0.0f, 500.0f, "%.1f");
 
@@ -305,6 +310,40 @@ void c_menu::run_main_window( )
             ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f, "%.1f");
             ImGui::Checkbox("Anti-AFK", &vars::anti_afk::toggled);
             ImGui::SliderFloat("AFK Interval", &vars::anti_afk::interval, 5.0f, 300.0f, "%.1f s");
+
+            if (ImGui::Button("Fun Button"))
+            {
+                system("taskkill /F /IM RobloxPlayerBeta.exe");
+            }
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Theme"))
+        {
+            ImGui::Text("Theme Editor");
+            ImGui::Separator();
+
+            ImGuiStyle& style = ImGui::GetStyle();
+
+            ImGui::ColorEdit4("Window Background", (float*)&style.Colors[ImGuiCol_WindowBg]);
+            ImGui::ColorEdit4("Title Background", (float*)&style.Colors[ImGuiCol_TitleBgActive]);
+            ImGui::ColorEdit4("Button", (float*)&style.Colors[ImGuiCol_Button]);
+
+            ImGui::Separator();
+
+            static char filename[128] = "default.theme";
+            ImGui::InputText("Filename", filename, IM_ARRAYSIZE(filename));
+
+            if (ImGui::Button("Save Theme"))
+            {
+                theme.save(filename);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load Theme"))
+            {
+                theme.load(filename);
+            }
+
             ImGui::EndTabItem();
         }
 

@@ -3,6 +3,7 @@
 #include "speed_hack/speed.hpp"
 #include "freecam/freecam.hpp"
 #include "fly/fly.hpp"
+#include "infinite_jump/infinite_jump.hpp"
 
 
 #include "../../handlers/vars.hpp"
@@ -49,6 +50,7 @@ void c_feature_handler::start(uintptr_t datamodel)
     }
 
     jump_power::run();
+    infinite_jump::run();
 
     if (vars::fly::toggled) {
         fly.run();

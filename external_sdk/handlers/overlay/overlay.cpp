@@ -5,6 +5,7 @@
 
 #include "../../game/features/handler.hpp"
 #include "../menu/menu.hpp"
+#include "../themes/theme.hpp"
 #include "../workspaceviewer/workspaceviewer.hpp"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
@@ -171,13 +172,16 @@ void c_overlay::start( )
     ::UpdateWindow( hwnd );
 
     ImGui::CreateContext( );
-    ImGuiIO & io = ImGui::GetIO( );
-    ( void ) io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-    io.IniFilename = NULL;
 
     ImGui::StyleColorsDark( );
+
+    std::ifstream f("default.theme");
+    if (f.good()) {
+        theme.load("default.theme");
+    } else {
+        theme.save("default.theme");
+    }
+
 
     ImGui_ImplWin32_Init( hwnd );
     ImGui_ImplDX11_Init( d3d_device, d3d_device_context );

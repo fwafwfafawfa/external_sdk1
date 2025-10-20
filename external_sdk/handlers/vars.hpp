@@ -116,6 +116,12 @@ namespace vars
         inline float default_value = 50.0f;
     }
 
+    namespace infinite_jump
+    {
+        inline bool toggled = false;
+        inline float jump_power_value = 1000.0f;
+    }
+
     namespace fly
     {
         inline bool toggled = false;

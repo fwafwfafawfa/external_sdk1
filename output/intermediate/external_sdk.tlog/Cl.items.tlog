@@ -10,6 +10,7 @@ C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sd
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\game\features\example_esp\esp.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\esp.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\game\features\fly\fly.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\fly.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\game\features\handler.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\handler.obj
+C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\game\features\infinite_jump\infinite_jump.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\infinite_jump.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\game\features\jump_power\jump_power.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\jump_power.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\game\features\player_info\player_info.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\player_info.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\game\features\speed_hack\speed.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\speed.obj
@@ -24,4 +25,5 @@ C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sd
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\handlers\overlay\draw.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\draw.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\handlers\overlay\overlay.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\overlay.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\handlers\utility\utility.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\utility.obj
+C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\handlers\themes\theme.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\theme.obj
 C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\external_sdk\main.cpp;C:\Users\lordnniky\Downloads\external_sdk-master\external_sdk-master\output\intermediate\main.obj

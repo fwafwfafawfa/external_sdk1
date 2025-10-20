@@ -1,4 +1,5 @@
 #include "main.hpp"
+#include "handlers/themes/theme.hpp"
 
 void reinitialize_game_pointers()
 {

@@ -153,6 +153,7 @@
     <ClCompile Include="game\features\example_esp\esp.cpp" />
     <ClCompile Include="game\features\fly\fly.cpp" />
     <ClCompile Include="game\features\handler.cpp" />
+    <ClCompile Include="game\features\infinite_jump\infinite_jump.cpp" />
     <ClCompile Include="game\features\jump_power\jump_power.cpp" />
     <ClCompile Include="game\features\player_info\player_info.cpp" />
     <ClCompile Include="game\features\speed_hack\speed.cpp" />
@@ -170,6 +171,7 @@
     <ClCompile Include="handlers\overlay\draw.cpp" />
     <ClCompile Include="handlers\overlay\overlay.cpp" />
     <ClCompile Include="handlers\utility\utility.cpp" />
+    <ClCompile Include="handlers\themes\theme.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -186,6 +188,7 @@
     <ClInclude Include="game\features\example_esp\esp.hpp" />
     <ClInclude Include="game\features\fly\fly.hpp" />
     <ClInclude Include="game\features\handler.hpp" />
+    <ClInclude Include="game\features\infinite_jump\infinite_jump.hpp" />
     <ClInclude Include="game\features\jump_power\jump_power.hpp" />
     <ClInclude Include="game\features\player_info\player_info.hpp" />
     <ClInclude Include="game\features\speed_hack\speed.hpp" />
@@ -203,6 +206,7 @@
     <ClInclude Include="handlers\overlay\overlay.hpp" />
     <ClInclude Include="handlers\utility\utility.hpp" />
     <ClInclude Include="handlers\vars.hpp" />
+    <ClInclude Include="handlers\themes\theme.hpp" />
     <ClInclude Include="main.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
