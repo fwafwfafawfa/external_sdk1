@@ -296,7 +296,7 @@ void c_menu::run_main_window( )
             ImGui::Separator();
             ImGui::Checkbox("Jump Power", &vars::jump_power::toggled);
             ImGui::Checkbox("Infinite Jump", &vars::infinite_jump::toggled);
-            ImGui::SliderFloat("Infinite Jump Power", &vars::infinite_jump::jump_power_value, 50.0f, 5000.0f);
+            ImGui::SliderFloat("Infinite Jump Power", &vars::infinite_jump::jump_power_value, 50.0f, 1000.0f);
             ImGui::SliderFloat("Jump Power Value", &vars::jump_power::value, 0.0f, 500.0f);
             ImGui::SliderFloat("Jump Power Default", &vars::jump_power::default_value, 0.0f, 500.0f, "%.1f");
 

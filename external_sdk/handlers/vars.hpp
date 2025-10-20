@@ -119,7 +119,7 @@ namespace vars
     namespace infinite_jump
     {
         inline bool toggled = false;
-        inline float jump_power_value = 1000.0f;
+        inline float jump_power_value = 5000.0f;
     }
 
     namespace fly
