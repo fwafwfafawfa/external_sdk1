@@ -4,7 +4,6 @@
 #include "freecam/freecam.hpp"
 #include "fly/fly.hpp"
 #include "infinite_jump/infinite_jump.hpp"
-#include "lag_switch/lag_switch.hpp"
 
 
 #include "../../handlers/vars.hpp"
@@ -57,7 +56,6 @@ void c_feature_handler::start(uintptr_t datamodel)
         fly.run();
     }
 
-    lag_switch.run(); // Call lag switch function
 
     misc.run_anti_afk(); // Call anti-AFK function
 }
