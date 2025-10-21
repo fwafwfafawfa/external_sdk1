@@ -3,55 +3,9 @@
 #include <windows.h>
 #include "../addons/imgui/imgui.h" // Corrected Include ImGui for ImColor
 #include <cmath> // For sqrtf
+#include <string> // Required for std::string
 
 // Define vector and CFrame structs first
-struct vector {
-    float x, y, z;
-
-    vector ( ) : x ( 0 ), y ( 0 ), z ( 0 ) {}
-    vector ( float x, float y, float z ) : x ( x ), y ( y ), z ( z ) {}
-
-    vector operator+(const vector& other) const { return vector(x + other.x, y + other.y, z + other.z); }
-    vector operator-(const vector& other) const { return vector(x - other.x, y - other.y, z - other.z); }
-    vector operator*(float scalar) const { return vector(x * scalar, y * scalar, z * scalar); }
-
-    float magnitude() const {
-        return sqrtf(x * x + y * y + z * z);
-    }
-
-    vector unit() const {
-        float mag = magnitude();
-        if (mag > 0) {
-            return vector(x / mag, y / mag, z / mag);
-        }
-        return vector(0, 0, 0);
-    }
-
-    bool IsZero() const {
-        return x == 0.0f && y == 0.0f && z == 0.0f;
-    }
-
-    void Normalize() {
-        float mag = magnitude();
-        if (mag > 0) {
-            x /= mag;
-            y /= mag;
-            z /= mag;
-        }
-    }
-};
-
-struct CFrame {
-    vector Position;
-    float R00, R01, R02;
-    float R10, R11, R12;
-    float R20, R21, R22;
-
-    CFrame() : Position({0,0,0}),
-               R00(1), R01(0), R02(0),
-               R10(0), R11(1), R12(0),
-               R20(0), R21(0), R22(1) {}
-};
 
 struct Matrix3 {
     float data[9]; // Represents a 3x3 matrix
@@ -136,6 +90,7 @@ namespace vars
         inline float teleport_offset_y = 5.0f;
         inline float teleport_offset_z = 3.0f;
         inline uintptr_t selected_player_for_info = 0;
+        inline std::string spectating_player_name = "";
     }
 
     namespace anti_afk

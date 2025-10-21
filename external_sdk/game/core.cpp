@@ -183,25 +183,7 @@ uintptr_t c_core::get_local_humanoid()
     return find_first_child_class(local_player_character_model, "Humanoid");
 }
 
-matrix c_core::cframe_to_matrix(const CFrame& cframe)
-{
-    matrix m;
-
-    // Rotation components (transposed for inverse)
-    m.m[0][0] = cframe.R00; m.m[0][1] = cframe.R10; m.m[0][2] = cframe.R20; m.m[0][3] = 0.0f;
-    m.m[1][0] = cframe.R01; m.m[1][1] = cframe.R11; m.m[1][2] = cframe.R21; m.m[1][3] = 0.0f;
-    m.m[2][0] = cframe.R02; m.m[2][1] = cframe.R12; m.m[2][2] = cframe.R22; m.m[2][3] = 0.0f;
-
-    // Translation components (inverse)
-    m.m[3][0] = -(cframe.R00 * cframe.Position.x + cframe.R10 * cframe.Position.y + cframe.R20 * cframe.Position.z);
-    m.m[3][1] = -(cframe.R01 * cframe.Position.x + cframe.R11 * cframe.Position.y + cframe.R21 * cframe.Position.z);
-    m.m[3][2] = -(cframe.R02 * cframe.Position.x + cframe.R12 * cframe.Position.y + cframe.R22 * cframe.Position.z);
-    m.m[3][3] = 1.0f;
-
-    return m;
-}
-
-bool c_core::world_to_screen( const vector& world_pos, vector2d& screen_pos, const matrix& view_matrix )
+bool c_core::world_to_screen( const vector& world_pos, vector2d& screen_pos, const view_matrix_t& view_matrix )
 {
     if ( !this->screen_height || !this->screen_width )
     {

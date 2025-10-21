@@ -7,7 +7,7 @@
 #include "../handlers/utility/utility.hpp" // Include utility.hpp for util.m_print
 #include "../../../handlers/vars.hpp" // Include vars.hpp for vars::esp members
 
-void c_esp::run_players( matrix viewmatrix )
+void c_esp::run_players( view_matrix_t viewmatrix )
 {
     std::vector< uintptr_t > players = core.get_players( g_main::datamodel );
 
@@ -132,81 +132,120 @@ void c_esp::run_players( matrix viewmatrix )
         int screen_height = core.get_screen_height( );
         draw.line( ImVec2( screen_width * 0.5f, screen_height ), ImVec2( s_player_root.x, s_player_root.y ), ImColor( 255, 255, 255, 255 ), 1.0f );
 
-        // --- Skeleton ESP ---
-        if (vars::esp::show_skeleton)
-        {
-            // Define a simplified skeleton structure (bone name, parent bone name)
-            // This assumes common Roblox character part names
-            struct BoneInfo { const char* name; const char* parent_name; };
-            BoneInfo skeleton_bones[] = {
-                // Torso to Head/Arms/Legs
-                {"Head", "UpperTorso"},
-                {"UpperTorso", "HumanoidRootPart"},
-                {"LowerTorso", "HumanoidRootPart"}, // Connect LowerTorso to Root
-                {"UpperTorso", "LowerTorso"},       // Connect UpperTorso to LowerTorso
+                        // --- Skeleton ESP ---
 
-                // Arms
-                {"RightUpperArm", "UpperTorso"},
-                {"RightLowerArm", "RightUpperArm"},
-                {"RightHand", "RightLowerArm"},
+                        if (vars::esp::show_skeleton)
 
-                {"LeftUpperArm", "UpperTorso"},
-                {"LeftLowerArm", "LeftUpperArm"},
-                {"LeftHand", "LeftLowerArm"},
-
-                // Legs
-                {"RightUpperLeg", "LowerTorso"},
-                {"RightLowerLeg", "RightUpperLeg"},
-                {"RightFoot", "RightLowerLeg"},
-
-                {"LeftUpperLeg", "LowerTorso"},
-                {"LeftLowerLeg", "LeftUpperLeg"},
-                {"LeftFoot", "LeftLowerLeg"}
-            };
-
-            std::unordered_map<std::string, vector> bone_world_positions;
-            std::unordered_map<std::string, vector2d> bone_screen_positions;
-
-            // Get positions of all relevant bones
-            for (const auto& bone_info : skeleton_bones)
-            {
-                uintptr_t bone_part = core.find_first_child(model, bone_info.name);
-                if (bone_part)
-                {
-                    uintptr_t p_bone_part = memory->read<uintptr_t>(bone_part + offsets::Primitive);
-                    if (p_bone_part)
-                    {
-                        vector w_bone_pos = memory->read<vector>(p_bone_part + offsets::Position);
-                        bone_world_positions[bone_info.name] = w_bone_pos;
-
-                        vector2d s_bone_pos;
-                        if (core.world_to_screen(w_bone_pos, s_bone_pos, viewmatrix))
                         {
-                            bone_screen_positions[bone_info.name] = s_bone_pos;
-                        }
-                    }
-                }
-            }
 
-            // Draw lines between connected bones
-            for (const auto& bone_info : skeleton_bones)
-            {
-                if (bone_screen_positions.count(bone_info.name) && bone_screen_positions.count(bone_info.parent_name))
-                {
-                    draw.line(
-                        ImVec2(bone_screen_positions[bone_info.name].x, bone_screen_positions[bone_info.name].y),
-                        ImVec2(bone_screen_positions[bone_info.parent_name].x, bone_screen_positions[bone_info.parent_name].y),
-                        vars::esp::esp_skeleton_color, // Configurable skeleton color
-                        1.0f
-                    );
-                }
-            }
-        }
+                            // Define a simplified skeleton structure (bone name, parent bone name)
+
+                            // This assumes common Roblox character part names
+
+                            struct BoneInfo { const char* name; const char* parent_name; };
+
+                            BoneInfo skeleton_bones[] = {
+
+                                {"Head", "Torso"},
+
+                                {"Torso", "HumanoidRootPart"},
+
+                
+
+                                {"Right Arm", "Torso"},
+
+                                {"Left Arm", "Torso"},
+
+                
+
+                                {"Right Leg", "Torso"},
+
+                                {"Left Leg", "Torso"}
+
+                            };
+
+                
+
+                            std::unordered_map<std::string, vector> bone_world_positions;
+
+                            std::unordered_map<std::string, vector2d> bone_screen_positions;
+
+                
+
+                            // Get positions of all relevant bones
+
+                            for (const auto& bone_info : skeleton_bones)
+
+                            {
+
+                                uintptr_t bone_part = core.find_first_child(model, bone_info.name);
+
+                                if (bone_part)
+
+                                {
+
+                                    uintptr_t p_bone_part = memory->read<uintptr_t>(bone_part + offsets::Primitive);
+
+                                    if (p_bone_part)
+
+                                    {
+
+                                        vector w_bone_pos = memory->read<vector>(p_bone_part + offsets::Position);
+
+                                        bone_world_positions[bone_info.name] = w_bone_pos;
+
+                
+
+                                        vector2d s_bone_pos;
+
+                                        if (core.world_to_screen(w_bone_pos, s_bone_pos, viewmatrix))
+
+                                        {
+
+                                            bone_screen_positions[bone_info.name] = s_bone_pos;
+
+                                        }
+
+                                    }
+
+                                }
+
+                            }
+
+                
+
+                            // Draw lines between connected bones
+
+                            for (const auto& bone_info : skeleton_bones)
+
+                            {
+
+                                if (bone_screen_positions.count(bone_info.name) && bone_screen_positions.count(bone_info.parent_name))
+
+                                {
+
+                                    draw.line(
+
+                                        ImVec2(bone_screen_positions[bone_info.name].x, bone_screen_positions[bone_info.name].y),
+
+                                        ImVec2(bone_screen_positions[bone_info.parent_name].x, bone_screen_positions[bone_info.parent_name].y),
+
+                                        vars::esp::esp_skeleton_color, // Configurable skeleton color
+
+                                        1.0f
+
+                                    );
+
+                                }
+
+                            }
+
+                        }
         // --- End Skeleton ESP ---
     }
 }
 
-void c_esp::run_aimbot(matrix viewmatrix)
+void c_esp::run_aimbot(view_matrix_t viewmatrix)
 {
     vector2d crosshair_pos = { static_cast<float>(core.get_screen_width() / 2), static_cast<float>(core.get_screen_height() / 2) };
 

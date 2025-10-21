@@ -52,7 +52,7 @@ void c_workspace_viewer::draw_selected_instance_highlight() {
 
     // Convert world position to screen position
     vector2d screen_pos;
-    matrix view_matrix;
+    view_matrix_t view_matrix;
 
     uintptr_t camera_obj = 0; // Initialize to nullptr
 
@@ -65,7 +65,7 @@ void c_workspace_viewer::draw_selected_instance_highlight() {
     camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Camera);
     if (!camera_obj) return;
 
-    view_matrix = memory->read<matrix>(g_main::v_engine + offsets::viewmatrix);
+    view_matrix = memory->read<view_matrix_t>(g_main::v_engine + offsets::viewmatrix);
 
     if (core.world_to_screen(world_pos, screen_pos, view_matrix)) {
         float screen_width = core.get_screen_width();

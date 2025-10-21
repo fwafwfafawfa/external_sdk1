@@ -94,6 +94,26 @@ void c_misc::teleport_to_position(uintptr_t p_local_root, vector target_pos)
     memory->write<vector>(p_local_root + offsets::Position, target_pos);
 }
 
+void c_misc::teleport_to_cframe(uintptr_t p_local_root, CFrame target_cframe)
+{
+    if (!p_local_root)
+    {
+        util.m_print("Teleport to CFrame: ERROR - p_local_root is NULL.");
+        return;
+    }
+
+    // Launch a new thread to repeatedly write the CFrame
+    std::thread([=]() {
+        util.m_print("Teleport to CFrame: Starting forceful CFrame write loop.");
+        for (auto i = 0; i != 100; i++)
+        {
+            memory->write<CFrame>(p_local_root + offsets::CFrame, target_cframe);
+            // Small delay to allow game to process, if needed, but loop is fast enough
+        }
+        util.m_print("Teleport to CFrame: Forceful CFrame write loop finished.");
+    }).detach();
+}
+
 void c_misc::spectate(uintptr_t player_instance)
 {
     util.m_print("Spectate Player: Attempting to spectate 0x%llX", player_instance);

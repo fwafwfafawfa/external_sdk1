@@ -11,6 +11,7 @@ class c_misc
 public:
     void teleport_to(uintptr_t player_instance);
     void teleport_to_position(uintptr_t p_local_root, vector target_pos);
+    void teleport_to_cframe(uintptr_t p_local_root, CFrame target_cframe);
     void spectate(uintptr_t player_instance);
     void run_anti_afk(); // Correctly added
 };

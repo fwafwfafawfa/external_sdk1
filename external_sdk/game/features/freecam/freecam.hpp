@@ -8,7 +8,7 @@ public:
     bool enabled = false;
 
 private:
-    uintptr_t original_subject = 0;
+    int original_camera_type = -1; // New: To store original CameraType
     bool rotating = false;
 };
 

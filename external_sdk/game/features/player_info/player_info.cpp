@@ -21,9 +21,76 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
     std::string player_classname = core.get_instance_classname(player_instance);
     ImGui::Text("Class Name: %s", player_classname.c_str());
 
-    // User ID
-    uintptr_t user_id = memory->read<uintptr_t>(player_instance + offsets::UserId);
-    ImGui::Text("User ID: %llu", user_id);
+    // Spectate Button
+    std::string spectateID = "Spectate##" + player_name;
+    if (ImGui::Button(spectateID.c_str()))
+    {
+        uintptr_t camera_ptr = memory->read<uintptr_t>(core.find_first_child_class(g_main::datamodel, "Workspace") + offsets::Camera);
+        if (camera_ptr)
+        {
+            if (vars::misc::spectating_player_name == player_name)
+            {
+                // Stop spectating, revert to local player
+                vars::misc::spectating_player_name = "";
+                uintptr_t local_humanoid = core.get_local_humanoid();
+                if (local_humanoid)
+                {
+                    memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, local_humanoid);
+                }
+            }
+            else
+            {
+                // Start spectating this player
+                uintptr_t player_model = core.get_model_instance(player_instance);
+                if (player_model)
+                {
+                    uintptr_t player_humanoid = core.find_first_child_class(player_model, "Humanoid");
+                    if (player_humanoid)
+                    {
+                        memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, player_humanoid);
+                        vars::misc::spectating_player_name = player_name;
+                    }
+                }
+            }
+        }
+    }
+    ImGui::SameLine(); // Place Teleport button on the same line
+
+    // Teleport Button
+    std::string teleportID = "Teleport##" + player_name;
+    if (ImGui::Button(teleportID.c_str()))
+    {
+        uintptr_t player_model = core.get_model_instance(player_instance);
+        if (player_model)
+        {
+            uintptr_t player_hrp = core.find_first_child(player_model, "HumanoidRootPart");
+            if (player_hrp)
+            {
+                uintptr_t p_player_hrp = memory->read<uintptr_t>(player_hrp + offsets::Primitive);
+                if (p_player_hrp)
+                {
+                    CFrame target_cframe = memory->read<CFrame>(p_player_hrp + offsets::CFrame);
+                    // Apply offsets to the target CFrame position
+                    target_cframe.Y += vars::misc::teleport_offset_y;
+                    target_cframe.Z += vars::misc::teleport_offset_z;
+
+                    uintptr_t local_player_character_model = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
+                    if (local_player_character_model)
+                    {
+                        uintptr_t local_hrp = core.find_first_child(local_player_character_model, "HumanoidRootPart");
+                        if (local_hrp)
+                        {
+                            uintptr_t p_local_hrp = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
+                            if (p_local_hrp)
+                            {
+                                misc.teleport_to_cframe(p_local_hrp, target_cframe);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     ImGui::Separator();
     ImGui::Text("Character Info:");

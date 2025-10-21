@@ -2,60 +2,88 @@
 #include "../../../main.hpp"
 #include <Windows.h>
 #include <cmath>
+#include "../../../handlers/utility/utility.hpp"
+#include "../../../handlers/vars.hpp" // Explicitly include vars.hpp for vector struct
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 // --- Helper Functions ---
-matrix create_identity_matrix() {
-    matrix m = {};
-    m.m[0][0] = m.m[1][1] = m.m[2][2] = m.m[3][3] = 1.0f;
-    return m;
+CFrame create_identity_cframe() {
+    CFrame cf = {};
+    cf.R00 = 1.0f; cf.R01 = 0.0f; cf.R02 = 0.0f;
+    cf.R10 = 0.0f; cf.R11 = 1.0f; cf.R12 = 0.0f;
+    cf.R20 = 0.0f; cf.R21 = 0.0f; cf.R22 = 1.0f;
+    cf.X = 0.0f; cf.Y = 0.0f; cf.Z = 0.0f;
+    return cf;
 }
 
-matrix multiply_matrices(const matrix& m1, const matrix& m2) {
-    matrix result = {};
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            result.m[i][j] = m1.m[i][0] * m2.m[0][j] + m1.m[i][1] * m2.m[1][j] + m1.m[i][2] * m2.m[2][j] + m1.m[i][3] * m2.m[3][j];
-        }
-    }
+CFrame multiply_cframes(const CFrame& c1, const CFrame& c2) {
+    CFrame result;
+    result.R00 = c1.R00 * c2.R00 + c1.R01 * c2.R10 + c1.R02 * c2.R20;
+    result.R01 = c1.R00 * c2.R01 + c1.R01 * c2.R11 + c1.R02 * c2.R21;
+    result.R02 = c1.R00 * c2.R02 + c1.R01 * c2.R12 + c1.R02 * c2.R22;
+
+    result.R10 = c1.R10 * c2.R00 + c1.R11 * c2.R10 + c1.R12 * c2.R20;
+    result.R11 = c1.R10 * c2.R01 + c1.R11 * c2.R11 + c1.R12 * c2.R21;
+    result.R12 = c1.R10 * c2.R02 + c1.R11 * c2.R12 + c1.R12 * c2.R22;
+
+    result.R20 = c1.R20 * c2.R00 + c1.R21 * c2.R10 + c1.R22 * c2.R20;
+    result.R21 = c1.R20 * c2.R01 + c1.R21 * c2.R11 + c1.R22 * c2.R21;
+    result.R22 = c1.R20 * c2.R02 + c1.R21 * c2.R12 + c1.R22 * c2.R22;
+
+    result.X = c1.R00 * c2.X + c1.R01 * c2.Y + c1.R02 * c2.Z + c1.X;
+    result.Y = c1.R10 * c2.X + c1.R11 * c2.Y + c1.R12 * c2.Z + c1.Y;
+    result.Z = c1.R20 * c2.X + c1.R21 * c2.Y + c1.R22 * c2.Z + c1.Z;
     return result;
 }
 
-matrix create_yaw_matrix(float yaw) {
-    matrix m = create_identity_matrix();
-    m.m[0][0] = cos(yaw);
-    m.m[0][2] = -sin(yaw);
-    m.m[2][0] = sin(yaw);
-    m.m[2][2] = cos(yaw);
-    return m;
+CFrame create_yaw_cframe(float yaw) {
+    CFrame cf = create_identity_cframe();
+    float cos_yaw = cos(yaw);
+    float sin_yaw = sin(yaw);
+    cf.R00 = cos_yaw; cf.R02 = -sin_yaw;
+    cf.R20 = sin_yaw; cf.R22 = cos_yaw;
+    return cf;
 }
 
-matrix create_pitch_matrix(float pitch) {
-    matrix m = create_identity_matrix();
-    m.m[1][1] = cos(pitch);
-    m.m[1][2] = sin(pitch);
-    m.m[2][1] = -sin(pitch);
-    m.m[2][2] = cos(pitch);
-    return m;
+CFrame create_pitch_cframe(float pitch) {
+    CFrame cf = create_identity_cframe();
+    float cos_pitch = cos(pitch);
+    float sin_pitch = sin(pitch);
+    cf.R11 = cos_pitch; cf.R12 = sin_pitch;
+    cf.R21 = -sin_pitch; cf.R22 = cos_pitch;
+    return cf;
 }
 
-matrix lerp_matrix(const matrix& a, const matrix& b, float t) {
-    matrix result;
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            result.m[i][j] = a.m[i][j] * (1.0f - t) + b.m[i][j] * t;
-        }
-    }
+CFrame lerp_cframe(const CFrame& a, const CFrame& b, float t) {
+    CFrame result;
+    result.R00 = a.R00 * (1.0f - t) + b.R00 * t;
+    result.R01 = a.R01 * (1.0f - t) + b.R01 * t;
+    result.R02 = a.R02 * (1.0f - t) + b.R02 * t;
+
+    result.R10 = a.R10 * (1.0f - t) + b.R10 * t;
+    result.R11 = a.R11 * (1.0f - t) + b.R11 * t;
+    result.R12 = a.R12 * (1.0f - t) + b.R12 * t;
+
+    result.R20 = a.R20 * (1.0f - t) + b.R20 * t;
+    result.R21 = a.R21 * (1.0f - t) + b.R21 * t;
+    result.R22 = a.R22 * (1.0f - t) + b.R22 * t;
+
+    result.X = a.X * (1.0f - t) + b.X * t;
+    result.Y = a.Y * (1.0f - t) + b.Y * t;
+    result.Z = a.Z * (1.0f - t) + b.Z * t;
     return result;
 }
 
 // --- c_freecam Implementation ---
 void c_freecam::run(float dt) {
+    util.m_print("freecam::run() called"); // Debug print
+
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     if (!workspace) {
+        util.m_print("freecam: Workspace not found"); // Debug print
         if (rotating) {
             ShowCursor(true);
             rotating = false;
@@ -64,17 +92,22 @@ void c_freecam::run(float dt) {
     }
     uintptr_t camera_ptr = memory->read<uintptr_t>(workspace + offsets::Camera);
     if (!camera_ptr) {
+        util.m_print("freecam: Camera pointer not found"); // Debug print
         if (rotating) {
             ShowCursor(true);
             rotating = false;
         }
         return;
     }
+    util.m_print("freecam: Camera Ptr: 0x%llX", camera_ptr); // Debug print
+    util.m_print("freecam: Current CameraType: %d", memory->read<int>(camera_ptr + offsets::CameraType)); // Debug print
 
     if (!enabled) {
-        if (original_subject != 0) {
-            memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, original_subject);
-            original_subject = 0;
+        util.m_print("freecam: Not enabled"); // Debug print
+        if (original_camera_type != -1) { // Check if a type was stored
+            util.m_print("freecam: Restoring original camera type"); // Debug print
+            memory->write<int>(camera_ptr + offsets::CameraType, original_camera_type);
+            original_camera_type = -1; // Reset to indicate no type stored
             if (rotating) {
                 ShowCursor(true);
                 rotating = false;
@@ -83,13 +116,21 @@ void c_freecam::run(float dt) {
         return;
     }
 
-    if (original_subject == 0) {
-        original_subject = memory->read<uintptr_t>(camera_ptr + offsets::CameraSubject);
-        memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, 0);
+    if (original_camera_type == -1) { // Only set if not already set
+        util.m_print("freecam: Setting CameraType to Scriptable (6)"); // Debug print
+        original_camera_type = memory->read<int>(camera_ptr + offsets::CameraType);
+        memory->write<int>(camera_ptr + offsets::CameraType, 6); // Scriptable
+        util.m_print("freecam: CameraType set to: %d", memory->read<int>(camera_ptr + offsets::CameraType)); // Debug print
     }
 
-    matrix current_cframe = memory->read<matrix>(camera_ptr + offsets::CFrame);
-    matrix final_cframe = current_cframe;
+    CFrame current_cframe = memory->read<CFrame>(camera_ptr + offsets::CFrame);
+    util.m_print("freecam: Current CFrame: Pos(%.2f, %.2f, %.2f)", current_cframe.X, current_cframe.Y, current_cframe.Z); // Debug print
+    util.m_print("freecam: Current CFrame: Rot(%.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f)",
+        current_cframe.R00, current_cframe.R01, current_cframe.R02,
+        current_cframe.R10, current_cframe.R11, current_cframe.R12,
+        current_cframe.R20, current_cframe.R21, current_cframe.R22); // Debug print
+
+    CFrame final_cframe = current_cframe;
 
     // --- Rotation ---
     if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) {
@@ -98,6 +139,7 @@ void c_freecam::run(float dt) {
             rotating = true;
             GetCursorPos(&last_pos);
             ShowCursor(false);
+            util.m_print("freecam: Started rotating"); // Debug print
         }
         
         POINT current_pos;
@@ -109,22 +151,26 @@ void c_freecam::run(float dt) {
         if (deltaX != 0 || deltaY != 0) {
             float yaw_change = -deltaX * vars::freecam::sensitivity;
             float pitch_change = -deltaY * vars::freecam::sensitivity;
+            util.m_print("freecam: Yaw: %.2f, Pitch: %.2f", yaw_change, pitch_change); // Debug print
 
-            vector pos = {final_cframe.m[0][3], final_cframe.m[1][3], final_cframe.m[2][3]};
-            final_cframe.m[0][3] = final_cframe.m[1][3] = final_cframe.m[2][3] = 0;
+            // Extract position before rotation
+            vector pos = {final_cframe.X, final_cframe.Y, final_cframe.Z};
+            final_cframe.X = final_cframe.Y = final_cframe.Z = 0; // Zero out position for rotation
 
-            matrix yaw_rot = create_yaw_matrix(yaw_change);
-            matrix pitch_rot = create_pitch_matrix(pitch_change);
+            CFrame yaw_rot = create_yaw_cframe(yaw_change);
+            CFrame pitch_rot = create_pitch_cframe(pitch_change);
 
-            final_cframe = multiply_matrices(yaw_rot, final_cframe);
-            final_cframe = multiply_matrices(final_cframe, pitch_rot);
+            final_cframe = multiply_cframes(yaw_rot, final_cframe);
+            final_cframe = multiply_cframes(final_cframe, pitch_rot);
 
-            final_cframe.m[0][3] = pos.x; final_cframe.m[1][3] = pos.y; final_cframe.m[2][3] = pos.z;
+            // Restore position after rotation
+            final_cframe.X = pos.x; final_cframe.Y = pos.y; final_cframe.Z = pos.z;
         }
     } else {
         if (rotating) {
             rotating = false;
             ShowCursor(true);
+            util.m_print("freecam: Stopped rotating"); // Debug print
         }
     }
 
@@ -132,21 +178,23 @@ void c_freecam::run(float dt) {
     float speed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? vars::freecam::speed * 2.0f : vars::freecam::speed;
     float frame_speed = speed * dt;
 
-    vector local_move_dir = {};
+    ::vector local_move_dir = {};
     if (GetAsyncKeyState('W') & 0x8000) local_move_dir.z -= frame_speed;
     if (GetAsyncKeyState('S') & 0x8000) local_move_dir.z += frame_speed;
     if (GetAsyncKeyState('A') & 0x8000) local_move_dir.x -= frame_speed;
     if (GetAsyncKeyState('D') & 0x8000) local_move_dir.x += frame_speed;
+    util.m_print("freecam: Local Move Dir: X: %.2f, Y: %.2f, Z: %.2f", local_move_dir.x, local_move_dir.y, local_move_dir.z); // Debug print
 
-    matrix translation = create_identity_matrix();
-    translation.m[0][3] = local_move_dir.x;
-    translation.m[2][3] = local_move_dir.z;
-    final_cframe = multiply_matrices(final_cframe, translation);
+    // Apply local movement to CFrame
+    final_cframe.X += final_cframe.R00 * local_move_dir.x + final_cframe.R01 * local_move_dir.y + final_cframe.R02 * local_move_dir.z;
+    final_cframe.Y += final_cframe.R10 * local_move_dir.x + final_cframe.R11 * local_move_dir.y + final_cframe.R12 * local_move_dir.z;
+    final_cframe.Z += final_cframe.R20 * local_move_dir.x + final_cframe.R21 * local_move_dir.y + final_cframe.R22 * local_move_dir.z;
 
-    if (GetAsyncKeyState(VK_SPACE) & 0x8000) final_cframe.m[1][3] += frame_speed;
-    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) final_cframe.m[1][3] -= frame_speed;
+    if (GetAsyncKeyState(VK_SPACE) & 0x8000) final_cframe.Y += frame_speed;
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) final_cframe.Y -= frame_speed;
+    util.m_print("freecam: Final CFrame Pos: X: %.2f, Y: %.2f, Z: %.2f", final_cframe.X, final_cframe.Y, final_cframe.Z); // Debug print
 
     // --- Write to game ---
-    matrix lerped_frame = lerp_matrix(current_cframe, final_cframe, 0.3f);
-    memory->write<matrix>(camera_ptr + offsets::CFrame, lerped_frame);
+    CFrame lerped_frame = lerp_cframe(current_cframe, final_cframe, 0.3f);
+    memory->write<CFrame>(camera_ptr + offsets::CFrame, lerped_frame);
 }

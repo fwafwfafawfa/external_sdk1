@@ -32,7 +32,7 @@ void c_feature_handler::start(uintptr_t datamodel)
     if (!roblox_window || GetForegroundWindow() != roblox_window)
         return;
 
-    matrix viewmatrix = memory->read< matrix >(g_main::v_engine + offsets::viewmatrix);
+    view_matrix_t viewmatrix = memory->read< view_matrix_t >(g_main::v_engine + offsets::viewmatrix);
 
     if (vars::esp::toggled)
         esp.run_players(viewmatrix);

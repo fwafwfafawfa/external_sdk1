@@ -4,8 +4,8 @@
 class c_esp
 {
 public:
-    void run_players( matrix viewmatrix );
-    void run_aimbot( matrix viewmatrix );
+    void run_players( view_matrix_t viewmatrix );
+    void run_aimbot( view_matrix_t viewmatrix );
 private:
     float leftover_x = 0.0f;
     float leftover_y = 0.0f;
