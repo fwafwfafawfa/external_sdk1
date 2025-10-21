@@ -194,7 +194,7 @@ void c_menu::run_main_window( )
             ImGui::SliderFloat( "Aimbot FOV", &vars::aimbot::fov, 1.0f, 200.0f );
             ImGui::SliderFloat( "Aimbot Speed", &vars::aimbot::speed, 1.0f, 40.0f );
             ImGui::SliderFloat( "Aimbot Deadzone", &vars::aimbot::deadzone, 0.0f, 20.0f );
-            ImGui::Checkbox( "Use SetCursorPos", &vars::aimbot::use_set_cursor_pos );
+            ImGui::Checkbox( "Press and your aimbot will stop working wagwhaijndjd[jjprkupoie[6i9uojfoieajfoahiogoagohgagagagangkbxkafafbafbafiafiafaifafaigiangaigpuaghwiutp;kmbfxnbibnxfkabnjabaghwaghawhguiwahgiuhahgugawfwafhwahgiawhgiahgawuighuawigawghwuiaghwiaghwuaghuiaghuiawgawguuagiuihawigighaoguiNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERpaogjpajgpajgpapojogwpjagpaghajb;fnmn[dnhda", &vars::aimbot::use_set_cursor_pos );
             ImGui::SliderFloat( "Aimbot Smoothing", &vars::aimbot::smoothing_factor, 0.0f, 1.0f );
             ImGui::Checkbox( "Show FOV Circle", &vars::aimbot::show_fov_circle ); // New: Toggle for FOV circle
             ImGui::Checkbox( "Prediction", &vars::aimbot::prediction ); // New: Toggle for Prediction
