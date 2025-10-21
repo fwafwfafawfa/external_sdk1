@@ -88,10 +88,15 @@ void c_config::save(const std::string& filename)
         file << "esp_show_health=" << (vars::esp::show_health ? "true" : "false") << std::endl;
         file << "esp_show_distance=" << (vars::esp::show_distance ? "true" : "false") << std::endl;
         file << "esp_show_skeleton=" << (vars::esp::show_skeleton ? "true" : "false") << std::endl;
+        file << "esp_show_tracers=" << (vars::esp::show_tracers ? "true" : "false") << std::endl;
+        file << "esp_show_box=" << (vars::esp::show_box ? "true" : "false") << std::endl;
+        file << "esp_hide_dead=" << (vars::esp::hide_dead ? "true" : "false") << std::endl;
+        file << "esp_hide_teammates=" << (vars::esp::hide_teammates ? "true" : "false") << std::endl;
         file << "esp_box_color=" << color_to_string(vars::esp::esp_box_color) << std::endl;
         file << "esp_name_color=" << color_to_string(vars::esp::esp_name_color) << std::endl;
         file << "esp_distance_color=" << color_to_string(vars::esp::esp_distance_color) << std::endl;
         file << "esp_skeleton_color=" << color_to_string(vars::esp::esp_skeleton_color) << std::endl;
+        file << "esp_tracer_color=" << color_to_string(vars::esp::esp_tracer_color) << std::endl;
 
         // Aimbot
         file << "[aimbot]" << std::endl;
@@ -130,6 +135,15 @@ void c_config::save(const std::string& filename)
         file << "misc_show_workspace_viewer=" << (vars::misc::show_workspace_viewer ? "true" : "false") << std::endl;
         file << "misc_teleport_offset_y=" << vars::misc::teleport_offset_y << std::endl;
         file << "misc_teleport_offset_z=" << vars::misc::teleport_offset_z << std::endl;
+
+        // Lag Switch
+        file << "[lag_switch]" << std::endl;
+        file << "lag_switch_toggled=" << (vars::lag_switch::toggled ? "true" : "false") << std::endl;
+        file << "lag_switch_activation_key=" << vars::lag_switch::activation_key << std::endl;
+        file << "lag_switch_lag_duration=" << vars::lag_switch::lag_duration << std::endl;
+        file << "lag_switch_lag_interval=" << vars::lag_switch::lag_interval << std::endl;
+        file << "lag_switch_auto_lag=" << (vars::lag_switch::auto_lag ? "true" : "false") << std::endl;
+        file << "lag_switch_manual_lag=" << (vars::lag_switch::manual_lag ? "true" : "false") << std::endl;
 
         file.close();
         std::cout << "Config saved to " << filename << std::endl;
@@ -177,13 +191,18 @@ void c_config::load(const std::string& filename)
         vars::esp::show_health = get_value(data, "esp_show_health", vars::esp::show_health);
         vars::esp::show_distance = get_value(data, "esp_show_distance", vars::esp::show_distance);
         vars::esp::show_skeleton = get_value(data, "esp_show_skeleton", vars::esp::show_skeleton);
+        vars::esp::show_tracers = get_value(data, "esp_show_tracers", vars::esp::show_tracers);
+        vars::esp::show_box = get_value(data, "esp_show_box", vars::esp::show_box);
+        vars::esp::hide_dead = get_value(data, "esp_hide_dead", vars::esp::hide_dead);
+        vars::esp::hide_teammates = get_value(data, "esp_hide_teammates", vars::esp::hide_teammates);
         vars::esp::esp_box_color = get_value(data, "esp_box_color", vars::esp::esp_box_color);
         vars::esp::esp_name_color = get_value(data, "esp_name_color", vars::esp::esp_name_color);
         vars::esp::esp_distance_color = get_value(data, "esp_distance_color", vars::esp::esp_distance_color);
         vars::esp::esp_skeleton_color = get_value(data, "esp_skeleton_color", vars::esp::esp_skeleton_color);
+        vars::esp::esp_tracer_color = get_value(data, "esp_tracer_color", vars::esp::esp_tracer_color);
 
         // Aimbot
-        vars::esp::toggled = get_value(data, "aimbot_toggled", vars::aimbot::toggled);
+        vars::aimbot::toggled = get_value(data, "aimbot_toggled", vars::aimbot::toggled);
         vars::aimbot::speed = get_value(data, "aimbot_speed", vars::aimbot::speed);
         vars::aimbot::fov = get_value(data, "aimbot_fov", vars::aimbot::fov);
         vars::aimbot::deadzone = get_value(data, "aimbot_deadzone", vars::aimbot::deadzone);
@@ -213,6 +232,14 @@ void c_config::load(const std::string& filename)
         vars::misc::show_workspace_viewer = get_value(data, "misc_show_workspace_viewer", vars::misc::show_workspace_viewer);
         vars::misc::teleport_offset_y = get_value(data, "misc_teleport_offset_y", vars::misc::teleport_offset_y);
         vars::misc::teleport_offset_z = get_value(data, "misc_teleport_offset_z", vars::misc::teleport_offset_z);
+
+        // Lag Switch
+        vars::lag_switch::toggled = get_value(data, "lag_switch_toggled", vars::lag_switch::toggled);
+        vars::lag_switch::activation_key = get_value(data, "lag_switch_activation_key", vars::lag_switch::activation_key);
+        vars::lag_switch::lag_duration = get_value(data, "lag_switch_lag_duration", vars::lag_switch::lag_duration);
+        vars::lag_switch::lag_interval = get_value(data, "lag_switch_lag_interval", vars::lag_switch::lag_interval);
+        vars::lag_switch::auto_lag = get_value(data, "lag_switch_auto_lag", vars::lag_switch::auto_lag);
+        vars::lag_switch::manual_lag = get_value(data, "lag_switch_manual_lag", vars::lag_switch::manual_lag);
 
         std::cout << "Config loaded from " << filename << std::endl;
     }

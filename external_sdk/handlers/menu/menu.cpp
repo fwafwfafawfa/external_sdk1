@@ -170,9 +170,13 @@ void c_menu::run_main_window( )
         if (ImGui::BeginTabItem("ESP"))
         {
             ImGui::Checkbox( "ESP", &vars::esp::toggled );
+            ImGui::Checkbox( "Show Box", &vars::esp::show_box );
+            ImGui::Checkbox( "Show Tracers", &vars::esp::show_tracers );
             ImGui::Checkbox( "Show Health", &vars::esp::show_health );
             ImGui::Checkbox( "Show Distance", &vars::esp::show_distance );
             ImGui::Checkbox( "Show Skeleton", &vars::esp::show_skeleton );
+            ImGui::Checkbox( "Hide Dead Players", &vars::esp::hide_dead );
+            ImGui::Checkbox( "Hide Teammates", &vars::esp::hide_teammates );
 
             ImGui::Separator();
             ImGui::Text("ESP Colors");
@@ -180,6 +184,7 @@ void c_menu::run_main_window( )
             ImGui::ColorEdit4("Name Color", (float*)&vars::esp::esp_name_color);
             ImGui::ColorEdit4("Distance Color", (float*)&vars::esp::esp_distance_color);
             ImGui::ColorEdit4("Skeleton Color", (float*)&vars::esp::esp_skeleton_color);
+            ImGui::ColorEdit4("Tracer Color", (float*)&vars::esp::esp_tracer_color);
             ImGui::EndTabItem();
         }
 
@@ -310,6 +315,36 @@ void c_menu::run_main_window( )
             ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f, "%.1f");
             ImGui::Checkbox("Anti-AFK", &vars::anti_afk::toggled);
             ImGui::SliderFloat("AFK Interval", &vars::anti_afk::interval, 5.0f, 300.0f, "%.1f s");
+
+            ImGui::Separator();
+            ImGui::Text("Lag Switch");
+            ImGui::Checkbox("Lag Switch", &vars::lag_switch::toggled);
+            ImGui::Checkbox("Manual Lag", &vars::lag_switch::manual_lag);
+            ImGui::Checkbox("Auto Lag", &vars::lag_switch::auto_lag);
+            ImGui::SliderFloat("Lag Duration", &vars::lag_switch::lag_duration, 0.1f, 5.0f, "%.1f s");
+            ImGui::SliderFloat("Lag Interval", &vars::lag_switch::lag_interval, 0.5f, 10.0f, "%.1f s");
+
+            // Key selection for Lag Switch activation
+            std::string lag_button_text = "Lag Key: " + virtual_key_to_string(vars::lag_switch::activation_key);
+            static bool awaiting_lag_key_press = false;
+            if (awaiting_lag_key_press)
+                lag_button_text = "Press a key...";
+
+            if (ImGui::Button(lag_button_text.c_str()))
+                awaiting_lag_key_press = true;
+
+            if (awaiting_lag_key_press)
+            {
+                for (int i = 1; i < 256; i++)
+                {
+                    if (GetAsyncKeyState(i) & 0x8000)
+                    {
+                        vars::lag_switch::activation_key = i;
+                        awaiting_lag_key_press = false;
+                        break;
+                    }
+                }
+            }
 
             if (ImGui::Button("Fun Button"))
             {

@@ -24,11 +24,16 @@ namespace vars
         inline bool show_health = true;
         inline bool show_distance = true;
         inline bool show_skeleton = false;
+        inline bool show_tracers = true;
+        inline bool show_box = true;
+        inline bool hide_dead = true;
+        inline bool hide_teammates = true;
 
         inline ImColor esp_box_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_name_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_distance_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_skeleton_color = ImColor(255, 0, 0, 255);
+        inline ImColor esp_tracer_color = ImColor(255, 255, 255, 255);
     }
 
     namespace aimbot
@@ -97,5 +102,15 @@ namespace vars
     {
         inline bool toggled = false;
         inline float interval = 15.0f;
+    }
+
+    namespace lag_switch
+    {
+        inline bool toggled = false;
+        inline int activation_key = 0x4C; // L key
+        inline float lag_duration = 0.5f; // How long to lag (seconds)
+        inline float lag_interval = 2.0f; // How often to lag (seconds)
+        inline bool auto_lag = false; // Automatically lag at intervals
+        inline bool manual_lag = true; // Manual lag on key press
     }
 }
