@@ -74,44 +74,79 @@ void c_misc::teleport_to(uintptr_t player_instance)
     util.m_print("Teleport to Player: Teleported local player to (%.1f, %.1f, %.1f). WARNING: HIGH DETECTION RISK!", w_target_pos_final.x, w_target_pos_final.y, w_target_pos_final.z);
 }
 
-void c_misc::teleport_to_position(uintptr_t p_local_root, vector target_pos)
+void c_misc::teleport_to_position(uintptr_t p_instance, vector target_pos)
 {
-    if (!p_local_root)
+    if (!p_instance)
     {
-        util.m_print("Teleport to Position: ERROR - p_local_root is NULL.");
+        util.m_print("Teleport to Position: ERROR - p_instance is NULL.");
         return;
     }
 
-    util.m_print("Teleport to Position: Attempting to write to 0x%llX with target position (%.1f, %.1f, %.1f)", p_local_root + offsets::Position, target_pos.x, target_pos.y, target_pos.z);
+    // Get the primitive from the instance
+    uintptr_t p_primitive = memory->read<uintptr_t>(p_instance + offsets::Primitive);
+    if (!p_primitive)
+    {
+        util.m_print("Teleport to Position: ERROR - p_primitive is NULL.");
+        return;
+    }
 
-    // Sanity check for target position before writing
-    if (!std::isfinite(target_pos.x) || !std::isfinite(target_pos.y) || !std::isfinite(target_pos.z)) {
+    // Sanity check for target position
+    if (!std::isfinite(target_pos.x) || !std::isfinite(target_pos.y) || !std::isfinite(target_pos.z))
+    {
         util.m_print("Teleport to Position: ERROR - Aborting write due to invalid (NaN/Infinity) target position.");
         return;
     }
 
-    // Write target position to local player's position
-    memory->write<vector>(p_local_root + offsets::Position, target_pos);
+    // Create CFrame with target position and identity rotation
+    CFrame target_cframe = {};
+    target_cframe.X = target_pos.x;
+    target_cframe.Y = target_pos.y;
+    target_cframe.Z = target_pos.z;
+    // Set rotation to identity matrix (assuming CFrame has 12 floats: X, Y, Z, followed by 9 rotation components)
+    // For a 3x3 identity matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+    if constexpr (sizeof(CFrame) >= sizeof(float) * 12) // Ensure CFrame has space for rotation
+    {
+        float* cframe_data = reinterpret_cast<float*>(&target_cframe);
+        cframe_data[3] = 1.0f; // R00
+        cframe_data[4] = 0.0f; // R01
+        cframe_data[5] = 0.0f; // R02
+        cframe_data[6] = 0.0f; // R10
+        cframe_data[7] = 1.0f; // R11
+        cframe_data[8] = 0.0f; // R12
+        cframe_data[9] = 0.0f; // R20
+        cframe_data[10] = 0.0f; // R21
+        cframe_data[11] = 1.0f; // R22
+    }
+
+    // Write CFrame to primitive's CFrame offset
+    memory->write<CFrame>(p_primitive + offsets::CFrame, target_cframe);
 }
 
-void c_misc::teleport_to_cframe(uintptr_t p_local_root, CFrame target_cframe)
+void c_misc::teleport_to_cframe(uintptr_t p_instance, CFrame target_cframe)
 {
-    if (!p_local_root)
+    if (!p_instance)
     {
-        util.m_print("Teleport to CFrame: ERROR - p_local_root is NULL.");
+        util.m_print("Teleport to CFrame: ERROR - p_instance is NULL.");
         return;
     }
 
-    // Launch a new thread to repeatedly write the CFrame
-    std::thread([=]() {
-        util.m_print("Teleport to CFrame: Starting forceful CFrame write loop.");
-        for (auto i = 0; i != 100; i++)
-        {
-            memory->write<CFrame>(p_local_root + offsets::CFrame, target_cframe);
-            // Small delay to allow game to process, if needed, but loop is fast enough
-        }
-        util.m_print("Teleport to CFrame: Forceful CFrame write loop finished.");
-    }).detach();
+    // Get the primitive from the instance
+    uintptr_t p_primitive = memory->read<uintptr_t>(p_instance + offsets::Primitive);
+    if (!p_primitive)
+    {
+        util.m_print("Teleport to CFrame: ERROR - p_primitive is NULL.");
+        return;
+    }
+
+    // Validate CFrame position components
+    if (!std::isfinite(target_cframe.X) || !std::isfinite(target_cframe.Y) || !std::isfinite(target_cframe.Z))
+    {
+        util.m_print("Teleport to CFrame: ERROR - Aborting write due to invalid (NaN/Infinity) CFrame position.");
+        return;
+    }
+
+    // Write CFrame to primitive's CFrame offset
+    memory->write<CFrame>(p_primitive + offsets::CFrame, target_cframe);
 }
 
 void c_misc::spectate(uintptr_t player_instance)

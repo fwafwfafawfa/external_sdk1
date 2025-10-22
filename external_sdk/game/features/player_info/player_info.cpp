@@ -66,10 +66,12 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
             uintptr_t player_hrp = core.find_first_child(player_model, "HumanoidRootPart");
             if (player_hrp)
             {
-                uintptr_t p_player_hrp = memory->read<uintptr_t>(player_hrp + offsets::Primitive);
-                if (p_player_hrp)
+                // Step 1: instance + primitive (get primitive pointer)
+                uintptr_t primitive_ptr = memory->read<uintptr_t>(player_hrp + offsets::Primitive);
+                if (primitive_ptr)
                 {
-                    CFrame target_cframe = memory->read<CFrame>(p_player_hrp + offsets::CFrame);
+                    // Step 2: primitive instance + cframe (read CFrame from primitive instance)
+                    CFrame target_cframe = memory->read<CFrame>(primitive_ptr + offsets::CFrame);
                     // Apply offsets to the target CFrame position
                     target_cframe.Y += vars::misc::teleport_offset_y;
                     target_cframe.Z += vars::misc::teleport_offset_z;
@@ -80,9 +82,11 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
                         uintptr_t local_hrp = core.find_first_child(local_player_character_model, "HumanoidRootPart");
                         if (local_hrp)
                         {
+                            // Step 1: instance + primitive (get primitive pointer)
                             uintptr_t p_local_hrp = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
                             if (p_local_hrp)
                             {
+                                // Step 2: primitive instance + cframe (write to primitive instance)
                                 misc.teleport_to_cframe(p_local_hrp, target_cframe);
                             }
                         }
