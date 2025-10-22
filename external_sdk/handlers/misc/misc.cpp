@@ -192,62 +192,39 @@ static std::chrono::steady_clock::time_point last_afk_action_time = std::chrono:
 
 void c_misc::run_anti_afk()
 {
-    if (!vars::anti_afk::toggled)
+    static std::atomic<bool> running{ false };
+
+    if (running)
         return;
 
-    auto current_time = std::chrono::steady_clock::now();
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::duration<float>>(current_time - last_afk_action_time).count();
+    running = true;
 
-    if (elapsed_time >= vars::anti_afk::interval)
-    {
-        static std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
-        static std::uniform_int_distribution<int> distribution(0, 1); // 0 for mouse, 1 for keyboard
+    std::thread([]()
+        {
+            util.m_print("antiafking");
 
-        if (distribution(generator) == 0) {
-            // Simulate a small mouse movement
-            INPUT input = { 0 };
-            input.type = INPUT_MOUSE;
-            input.mi.dx = 1; // Move 1 pixel right
-            input.mi.dy = 1; // Move 1 pixel down
-            input.mi.dwFlags = MOUSEEVENTF_MOVE;
-            SendInput(1, &input, sizeof(INPUT));
+            while (vars::anti_afk::toggled)
+            {
+                uintptr_t localplayer = g_main::localplayer;
+                if (!localplayer)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    continue;
+                }
 
-            input.mi.dx = -1; // Move 1 pixel left
-            input.mi.dy = -1; // Move 1 pixel up
-            SendInput(1, &input, sizeof(INPUT));
+                uintptr_t playerconfig = memory->read<uintptr_t>(localplayer + offsets::PlayerConfigurerPointer);
+                if (!playerconfig)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    continue;
+                }
+                memory->write<int>(memory->find_image() + 0x5CFF4F4, 99999);
+                memory->write<int>(playerconfig + offsets::ForceNewAFKDuration, 1);
 
-            util.m_print("Anti-AFK: Simulated mouse movement.");
-        } else {
-            // Simulate a keyboard press (W, A, S, D)
-            static std::uniform_int_distribution<int> key_distribution(0, 3); // 0=W, 1=A, 2=S, 3=D
-            int key_choice = key_distribution(generator);
-            WORD vk_key = 0;
-
-            switch (key_choice) {
-                case 0: vk_key = 'W'; break;
-                case 1: vk_key = 'A'; break;
-                case 2: vk_key = 'S'; break;
-                case 3: vk_key = 'D'; break;
+                std::this_thread::sleep_for(std::chrono::seconds(5));
             }
 
-            if (vk_key != 0) {
-                INPUT input[2] = { 0 };
-                // Key Down
-                input[0].type = INPUT_KEYBOARD;
-                input[0].ki.wVk = vk_key;
-                SendInput(1, &input[0], sizeof(INPUT));
-
-                // Key Up after a very short delay
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-                input[1].type = INPUT_KEYBOARD;
-                input[1].ki.wVk = vk_key;
-                input[1].ki.dwFlags = KEYEVENTF_KEYUP;
-                SendInput(1, &input[1], sizeof(INPUT));
-
-                util.m_print("Anti-AFK: Simulated key press: %c.", (char)vk_key);
-            }
-        }
-        last_afk_action_time = current_time;
-    }
+            util.m_print("no more antiafk");
+            running = false;
+        }).detach();
 }
