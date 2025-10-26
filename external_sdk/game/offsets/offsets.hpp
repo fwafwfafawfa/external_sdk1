@@ -20,6 +20,11 @@ Total offsets: 188
 #include <cstdint>
 #include <string>
 
+#pragma once
+
+#include <cstdint>
+#include <string>
+
 namespace offsets {
     inline std::string ClientVersion = "version-4aeb17bd13994560";
 
@@ -47,8 +52,8 @@ namespace offsets {
     inline constexpr uintptr_t ByteCode = 0x1a8;
     inline constexpr uintptr_t ByteCode_Pointer = 0x10;
     inline constexpr uintptr_t ByteCode_Size = 0x20;
-    inline constexpr uintptr_t CFrame = 0xf8;
-    inline constexpr uintptr_t Camera = 0x448;
+    inline constexpr uintptr_t CFrame = 0x90;
+    inline constexpr uintptr_t Camera = 0x410;
     inline constexpr uintptr_t CameraMaxZoomDistance = 0x2d0;
     inline constexpr uintptr_t CameraMinZoomDistance = 0x2d4;
     inline constexpr uintptr_t CameraMode = 0x2d8;

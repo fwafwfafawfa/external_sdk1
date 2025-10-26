@@ -23,31 +23,21 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
 
     // Spectate Button
     std::string spectateID = "Spectate##" + player_name;
-    if (ImGui::Button(spectateID.c_str()))
-    {
-        uintptr_t camera_ptr = memory->read<uintptr_t>(core.find_first_child_class(g_main::datamodel, "Workspace") + offsets::Camera);
-        if (camera_ptr)
-        {
-            if (vars::misc::spectating_player_name == player_name)
-            {
-                // Stop spectating, revert to local player
-                vars::misc::spectating_player_name = "";
-                uintptr_t local_humanoid = core.get_local_humanoid();
-                if (local_humanoid)
-                {
-                    memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, local_humanoid);
-                }
+    if (ImGui::Button(spectateID.c_str())) {
+        uintptr_t cameraptr = memory->read<uintptr_t>(core.find_first_child_class(g_main::datamodel, "Workspace") + offsets::Camera);
+        if (cameraptr) {
+            if (vars::misc::spectating_player_name == player_name) {
+                vars::misc::spectating_player_name.clear();
+                uintptr_t localhumanoid = core.get_local_humanoid();
+                if (localhumanoid)
+                    memory->write<uintptr_t>(cameraptr + offsets::CameraSubject, localhumanoid);
             }
-            else
-            {
-                // Start spectating this player
-                uintptr_t player_model = core.get_model_instance(player_instance);
-                if (player_model)
-                {
-                    uintptr_t player_humanoid = core.find_first_child_class(player_model, "Humanoid");
-                    if (player_humanoid)
-                    {
-                        memory->write<uintptr_t>(camera_ptr + offsets::CameraSubject, player_humanoid);
+            else {
+                uintptr_t playerModel = core.get_model_instance(player_instance);
+                if (playerModel) {
+                    uintptr_t humanoid = core.find_first_child_class(playerModel, "Humanoid");
+                    if (humanoid) {
+                        memory->write<uintptr_t>(cameraptr + offsets::CameraSubject, humanoid);
                         vars::misc::spectating_player_name = player_name;
                     }
                 }

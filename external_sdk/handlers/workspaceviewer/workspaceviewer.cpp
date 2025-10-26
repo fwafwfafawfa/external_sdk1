@@ -119,7 +119,6 @@ void c_workspace_viewer::draw_properties() {
         if (ImGui::Button("Teleport to")) {
             util.m_print("Teleport: Button clicked. Selected instance: 0x%llX", selected_instance);
 
-            // Get local player's character model
             uintptr_t local_player_character_model_temp = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
             if (!local_player_character_model_temp) {
                 util.m_print("Teleport: Could not teleport: Local player character model not found.");
@@ -127,7 +126,6 @@ void c_workspace_viewer::draw_properties() {
             }
             util.m_print("Teleport: Local player character model found: 0x%llX", local_player_character_model_temp);
 
-            // Get local player's HumanoidRootPart address
             uintptr_t hrp_temp = core.find_first_child(local_player_character_model_temp, "HumanoidRootPart");
             if (!hrp_temp) {
                 util.m_print("Teleport: Could not teleport: Local HumanoidRootPart not found.");
@@ -142,26 +140,23 @@ void c_workspace_viewer::draw_properties() {
             }
             util.m_print("Teleport: Local HumanoidRootPart Primitive found: 0x%llX", p_local_root);
 
-                        vector w_target_pos = { 0,0,0 }; // Initialize to zero
+            vector w_target_pos = { 0, 0, 0 };
             bool position_found = false;
 
             std::string target_class_name = core.get_instance_classname(selected_instance);
 
             if (target_class_name.find("Model") != std::string::npos) {
-                // If it's a Model, try to find a HumanoidRootPart or a BasePart child
-                uintptr_t primary_part = 0; // Placeholder for PrimaryPart logic if offset is found
+                uintptr_t primary_part = 0;
 
-                // Try to find HumanoidRootPart within the model
                 uintptr_t hrp_in_model = core.find_first_child(selected_instance, "HumanoidRootPart");
                 if (hrp_in_model) {
                     primary_part = hrp_in_model;
                 }
                 else {
-                    // If no HRP, try to find the first BasePart child
                     std::vector<uintptr_t> children = core.children(selected_instance);
                     for (uintptr_t child : children) {
                         std::string child_class_name = core.get_instance_classname(child);
-                        if (child_class_name.find("Part") != std::string::npos) { // Check if it's a BasePart
+                        if (child_class_name.find("Part") != std::string::npos) {
                             primary_part = child;
                             break;
                         }
@@ -177,7 +172,6 @@ void c_workspace_viewer::draw_properties() {
                 }
             }
             else if (target_class_name.find("Part") != std::string::npos) {
-                // If it's a Part (or subclass like BasePart), use its Primitive
                 uintptr_t target_primitive = memory->read<uintptr_t>(selected_instance + offsets::Primitive);
                 if (target_primitive) {
                     w_target_pos = memory->read<vector>(target_primitive + offsets::Position);
@@ -187,21 +181,19 @@ void c_workspace_viewer::draw_properties() {
 
             if (!position_found) {
                 util.m_print("Teleport: Could not get target position from selected instance (unsupported type or no valid part found).");
-                return; // Cannot get position, so return
+                return;
             }
 
-            // Add a small offset on Y axis to avoid getting stuck
-            w_target_pos.y += 5.0f;
+            // Add offsets here to fix teleport issues
+            w_target_pos.y += vars::misc::teleport_offset_y;
+            w_target_pos.z += vars::misc::teleport_offset_z;
 
-            // Sanity check for target position
             if (!std::isfinite(w_target_pos.x) || !std::isfinite(w_target_pos.y) || !std::isfinite(w_target_pos.z)) {
                 util.m_print("Teleport: Aborting teleport due to invalid (NaN/Infinity) target position: (%.1f, %.1f, %.1f)", w_target_pos.x, w_target_pos.y, w_target_pos.z);
                 return;
             }
 
-            // Teleport using misc.teleport_to_position
             misc.teleport_to_position(p_local_root, w_target_pos);
-
         }
     }
 

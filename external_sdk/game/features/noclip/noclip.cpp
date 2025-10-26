@@ -21,9 +21,14 @@ void c_noclip::run() {
         return;
     }
 
-    auto children = core.children(character);
+    std::vector<uintptr_t> children = core.children(character);
+    if (children.empty()) {
+        return;
+    }
+
     for (auto child : children) {
         std::string className = core.get_instance_classname(child);
+
         // Only attempt to modify actual parts
         if (className.find("Part") != std::string::npos || className.find("Mesh") != std::string::npos) {
             instance inst(child);
