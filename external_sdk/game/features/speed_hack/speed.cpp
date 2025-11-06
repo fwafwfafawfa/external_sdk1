@@ -21,13 +21,13 @@ namespace speed_hack
 
         if (current_toggled)
         {
-            memory->write<float>(humanoid_ptr + offsets::Walkspeed, current_value);
-            memory->write<float>(humanoid_ptr + offsets::WalkspeedCheck, current_value);
+            memory->write<float>(humanoid_ptr + offsets::WalkSpeed, current_value);
+            memory->write<float>(humanoid_ptr + offsets::WalkSpeedCheck, current_value);
         }
         else if (last_toggled_state) // If hack was ON last frame but is now OFF, reset to default
         {
-            memory->write<float>(humanoid_ptr + offsets::Walkspeed, 16.0f);
-            memory->write<float>(humanoid_ptr + offsets::WalkspeedCheck, 16.0f);
+            memory->write<float>(humanoid_ptr + offsets::WalkSpeed, 16.0f);
+            memory->write<float>(humanoid_ptr + offsets::WalkSpeedCheck, 16.0f);
         }
 
         // Update static variables for next frame's comparison

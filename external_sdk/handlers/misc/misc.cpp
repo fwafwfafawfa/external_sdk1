@@ -247,7 +247,7 @@ void c_misc::run_anti_afk()
                     continue;
                 }
 
-                uintptr_t playerconfig = memory->read<uintptr_t>(localplayer + offsets::PlayerConfigurerPointer);
+                uintptr_t playerconfig = memory->read<uintptr_t>(localplayer + offsets::ForceNewAFKDuration);
                 if (!playerconfig)
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));

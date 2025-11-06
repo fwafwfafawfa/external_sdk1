@@ -98,6 +98,7 @@ namespace vars
         inline std::string spectating_player_name = "";
         inline uintptr_t spectating_camera = 0;
 
+
     }
 
     namespace anti_afk
