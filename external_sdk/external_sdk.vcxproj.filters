@@ -54,9 +54,6 @@
     <ClCompile Include="handlers\menu\menu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="addons\kernel\driver.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="game\features\handler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -91,6 +88,21 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="game\features\player_info\player_info.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="addons\kernel\memory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="game\features\fly\fly.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="game\features\infinite_jump\infinite_jump.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="handlers\themes\theme.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="game\features\airswim\airswim.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -137,9 +149,6 @@
     <ClInclude Include="handlers\menu\menu.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="addons\kernel\driver.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="game\offsets\offsets.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -183,6 +192,21 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="game\features\player_info\player_info.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="addons\kernel\memory.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game\features\fly\fly.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game\features\infinite_jump\infinite_jump.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="handlers\themes\theme.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game\features\airswim\airswim.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

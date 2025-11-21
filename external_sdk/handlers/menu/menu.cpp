@@ -265,6 +265,7 @@ void c_menu::run_main_window( )
             ImGui::Checkbox( "Freecam", &vars::freecam::toggled );
             ImGui::Checkbox( "Noclip", &vars::noclip::toggled );
             ImGui::Checkbox( "Fly (credits to world_to_client)", &vars::fly::toggled );
+            ImGui::Checkbox( "idk", &vars::airswim::toggled );
             ImGui::SliderFloat("Fly Speed", &vars::fly::speed, 0.1f, 2.0f);
             
             // Fly Key selection

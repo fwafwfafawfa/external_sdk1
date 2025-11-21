@@ -3,46 +3,52 @@
 #include "../../../game/offsets/offsets.hpp"
 #include "../../../game/core.hpp"
 #include "../../../addons/kernel/memory.hpp"
-#include "../../../handlers/utility/utility.hpp"
 
 namespace infinite_jump
 {
+    bool last_space = false;
+    int cooldown = 0;
+
     void run()
     {
         if (!vars::infinite_jump::toggled)
-            return;
-
-        uintptr_t humanoid_ptr = core.get_local_humanoid();
-        if (!humanoid_ptr)
             return;
 
         uintptr_t character = core.get_model_instance(g_main::localplayer);
         if (!character)
             return;
 
-        uintptr_t humanoidRootPart = core.find_first_child(character, "HumanoidRootPart");
-        if (!humanoidRootPart)
+        uintptr_t hrp = core.find_first_child(character, "HumanoidRootPart");
+        if (!hrp)
             return;
 
-        uintptr_t primitive = memory->read<uintptr_t>(humanoidRootPart + offsets::Primitive);
+        uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
         if (!primitive)
             return;
 
-        // Ensure CanCollide is false and Anchored is false for the primitive
-        memory->write<bool>(primitive + offsets::CanCollide, false);
-        char primitive_flags = memory->read<char>(primitive + offsets::Anchored);
-        if ((primitive_flags & offsets::AnchoredMask) != 0) {
-            primitive_flags &= ~offsets::AnchoredMask; // Unset the anchored bit
-            memory->write<char>(primitive + offsets::Anchored, primitive_flags);
+        bool space = (GetKeyState(VK_SPACE) & 0x8000);
+
+        // Anti-fly cooldown
+        if (cooldown > 0)
+            cooldown--;
+
+        if (space)
+        {
+            // apply upward force every frame while holding space
+            vector vel = memory->read<vector>(primitive + offsets::Velocity);
+
+            vel.y = vars::infinite_jump::jump_power_value;
+            memory->write<vector>(primitive + offsets::Velocity, vel);
+
+            cooldown = 4; // 4–6 frames is ideal
+        }
+        else
+        {
+            // when space released, stop jump force
+            // allow next jump after cooldown hits 0
         }
 
-        if (GetKeyState(VK_SPACE) & 0x8000)
-        {
-            vector current_velocity = memory->read<vector>(primitive + offsets::Velocity);
-            current_velocity.y = vars::infinite_jump::jump_power_value;
-            memory->write<vector>(primitive + offsets::Velocity, current_velocity);
-        }
+
+        last_space = space;
     }
 }
-
-

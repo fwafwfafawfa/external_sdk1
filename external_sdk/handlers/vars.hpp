@@ -89,6 +89,11 @@ namespace vars
         inline int fly_mode = 0; // 0 = Hold, 1 = Toggle
     }
 
+    namespace airswim
+    {
+        inline bool toggled = false;
+    }
+
     namespace misc
     {
         inline bool show_workspace_viewer = false;

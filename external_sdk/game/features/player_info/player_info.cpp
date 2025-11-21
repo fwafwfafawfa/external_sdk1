@@ -5,6 +5,44 @@
 #include "../../../addons/kernel/memory.hpp"
 #include "../../../handlers/utility/utility.hpp"
 
+// Teleport helper that writes Position directly to the local player's primitive (no CFrame)
+static void TeleportTo(const vector& cords)
+{
+    if (!g_main::datamodel || !g_main::localplayer) {
+        util.m_print("TeleportTo: datamodel or localplayer missing");
+        return;
+    }
+
+    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+    if (!workspace) {
+        util.m_print("TeleportTo: Workspace not found");
+        return;
+    }
+
+    uintptr_t local_player_character_model = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+    if (!local_player_character_model) {
+        util.m_print("TeleportTo: Local player character model not found");
+        return;
+    }
+
+    uintptr_t hrp = core.find_first_child(local_player_character_model, "HumanoidRootPart");
+    if (!hrp) {
+        util.m_print("TeleportTo: HumanoidRootPart not found");
+        return;
+    }
+
+    uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+    if (!primitive) {
+        util.m_print("TeleportTo: primitive pointer not found for HRP: 0x%llX", hrp);
+        return;
+    }
+
+    // Write position directly
+    memory->write<vector>(primitive + offsets::Position, cords);
+    vector pos_after = memory->read<vector>(primitive + offsets::Position);
+    util.m_print("TeleportTo: wrote Position to primitive 0x%llX -> (%.3f, %.3f, %.3f)", primitive, pos_after.x, pos_after.y, pos_after.z);
+}
+
 void c_player_info::draw_player_info(uintptr_t player_instance)
 {
     if (player_instance == 0)
@@ -46,41 +84,42 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
     }
     ImGui::SameLine(); // Place Teleport button on the same line
 
-    // Teleport Button
+    // Teleport Button - use TeleportTo (no CFrame)
     std::string teleportID = "Teleport##" + player_name;
     if (ImGui::Button(teleportID.c_str()))
     {
         uintptr_t player_model = core.get_model_instance(player_instance);
-        if (player_model)
+        if (!player_model)
+        {
+            util.m_print("Teleport: player model not found for 0x%llX", player_instance);
+        }
+        else
         {
             uintptr_t player_hrp = core.find_first_child(player_model, "HumanoidRootPart");
-            if (player_hrp)
+            if (!player_hrp)
             {
-                // Step 1: instance + primitive (get primitive pointer)
-                uintptr_t primitive_ptr = memory->read<uintptr_t>(player_hrp + offsets::Primitive);
-                if (primitive_ptr)
+                util.m_print("Teleport: player HRP not found for model 0x%llX", player_model);
+            }
+            else
+            {
+                uintptr_t target_primitive_ptr = memory->read<uintptr_t>(player_hrp + offsets::Primitive);
+                if (!target_primitive_ptr)
                 {
-                    // Step 2: primitive instance + cframe (read CFrame from primitive instance)
-                    CFrame target_cframe = memory->read<CFrame>(primitive_ptr + offsets::CFrame);
-                    // Apply offsets to the target CFrame position
-                    target_cframe.Y += vars::misc::teleport_offset_y;
-                    target_cframe.Z += vars::misc::teleport_offset_z;
+                    util.m_print("Teleport: target primitive ptr not found for HRP 0x%llX", player_hrp);
+                }
+                else
+                {
+                    // Read target position from player's HRP primitive
+                    vector target_pos = memory->read<vector>(target_primitive_ptr + offsets::Position);
 
-                    uintptr_t local_player_character_model = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
-                    if (local_player_character_model)
-                    {
-                        uintptr_t local_hrp = core.find_first_child(local_player_character_model, "HumanoidRootPart");
-                        if (local_hrp)
-                        {
-                            // Step 1: instance + primitive (get primitive pointer)
-                            uintptr_t p_local_hrp = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
-                            if (p_local_hrp)
-                            {
-                                // Step 2: primitive instance + cframe (write to primitive instance)
-                                misc.teleport_to_cframe(p_local_hrp, target_cframe);
-                            }
-                        }
-                    }
+                    // Apply user-defined Y/Z offsets
+                    target_pos.y += vars::misc::teleport_offset_y;
+                    target_pos.z += vars::misc::teleport_offset_z;
+
+                    util.m_print("Teleport: Target position: (%.3f, %.3f, %.3f)", target_pos.x, target_pos.y, target_pos.z);
+
+                    // Use the direct teleport helper (no CFrame)
+                    TeleportTo(target_pos);
                 }
             }
         }

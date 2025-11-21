@@ -1,22 +1,31 @@
 #include "instance.hpp"
 
+// This implementation now uses the PrimitiveFlags offset and CanCollideMask,
+// which is more likely to be correct after a game update.
 bool instance::GetCanCollide() {
-    uintptr_t Primitive = memory->read<uintptr_t>(this->self + offsets::Primitive);
+    uintptr_t Primitive = read<uintptr_t>(this->self + offsets::Primitive);
     if (!Primitive) return false;
-    return (memory->read<BYTE>(Primitive + offsets::CanCollide) & 0x08) != 0;
+
+    // Read the entire flags byte
+    BYTE flags = read<BYTE>(Primitive + offsets::PrimitiveFlags);
+
+    // Check if the CanCollide bit is set
+    return (flags & offsets::CanCollideMask) != 0;
 }
 
 bool instance::SetCanCollide(bool enable) {
-    uintptr_t Primitive = memory->read<uintptr_t>(this->self + offsets::Primitive);
+    uintptr_t Primitive = read<uintptr_t>(this->self + offsets::Primitive);
     if (!Primitive) return false;
 
-    BYTE val = memory->read<BYTE>(Primitive + offsets::CanCollide);
+    // Read the entire flags byte
+    BYTE flags = read<BYTE>(Primitive + offsets::PrimitiveFlags);
 
     if (enable)
-        val |= 0x08;
+        flags |= offsets::CanCollideMask; // Set the CanCollide bit
     else
-        val &= ~0x08;
+        flags &= ~offsets::CanCollideMask; // Unset the CanCollide bit
 
-    memory->write<BYTE>(Primitive + offsets::CanCollide, val);
+    // Write the modified flags byte back
+    write<BYTE>(Primitive + offsets::PrimitiveFlags, flags);
     return enable;
 }
