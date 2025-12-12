@@ -3,6 +3,7 @@
 #include "../vars.hpp"
 #include "../themes/theme.hpp"
 #include "../../game/features/player_info/player_info.hpp"
+#include "../../game/features/exploits/exploits.hpp"
 
 // Helper function to convert virtual key codes to strings
 static std::string virtual_key_to_string( int virtual_key )
@@ -316,6 +317,17 @@ void c_menu::run_main_window( )
             ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f, "%.1f");
             ImGui::Checkbox("Anti-AFK", &vars::anti_afk::toggled);
             ImGui::SliderFloat("AFK Interval", &vars::anti_afk::interval, 5.0f, 300.0f, "%.1f s");
+
+
+            // Exploits -> Friendly Fire toggle
+            ImGui::Separator();
+            ImGui::Text("Exploits");
+            ImGui::Checkbox("Enable Exploits", &vars::exploits::enabled);
+            ImGui::Checkbox("Friendly Fire", &vars::exploits::friendly_fire);
+            if (vars::exploits::enabled && vars::exploits::friendly_fire) {
+                // start the exploits thread
+                exploits::allow_friendly_fire();
+            }
 
             if (ImGui::Button("Fun Button"))
             {

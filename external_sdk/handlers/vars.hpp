@@ -102,14 +102,18 @@ namespace vars
         inline uintptr_t selected_player_for_info = 0;
         inline std::string spectating_player_name = "";
         inline uintptr_t spectating_camera = 0;
-
-
     }
 
     namespace anti_afk
     {
         inline bool toggled = false;
         inline float interval = 15.0f;
+    }
+
+    namespace exploits
+    {
+        inline bool enabled = false;
+        inline bool friendly_fire = false;
     }
 
     namespace lag_switch

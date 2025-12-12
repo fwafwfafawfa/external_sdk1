@@ -14,6 +14,9 @@ public:
     void teleport_to_cframe(uintptr_t p_local_root, CFrame target_cframe);
     void spectate(uintptr_t player_instance);
     void run_anti_afk(); // Correctly added
+
+    // New: write position directly to local player's primitive
+    void teleport_to_direct(const vector& cords);
 };
 
 inline c_misc misc;

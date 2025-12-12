@@ -152,6 +152,7 @@
     <ClCompile Include="game\core.cpp" />
     <ClCompile Include="game\features\airswim\airswim.cpp" />
     <ClCompile Include="game\features\example_esp\esp.cpp" />
+    <ClCompile Include="game\features\exploits\exploits.cpp" />
     <ClCompile Include="game\features\fly\fly.cpp" />
     <ClCompile Include="game\features\handler.cpp" />
     <ClCompile Include="game\features\infinite_jump\infinite_jump.cpp" />
@@ -188,6 +189,7 @@
     <ClInclude Include="game\core.hpp" />
     <ClInclude Include="game\features\airswim\airswim.hpp" />
     <ClInclude Include="game\features\example_esp\esp.hpp" />
+    <ClInclude Include="game\features\exploits\exploits.hpp" />
     <ClInclude Include="game\features\fly\fly.hpp" />
     <ClInclude Include="game\features\handler.hpp" />
     <ClInclude Include="game\features\infinite_jump\infinite_jump.hpp" />
