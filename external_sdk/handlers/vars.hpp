@@ -5,7 +5,8 @@
 #include <cmath> // For sqrtf
 #include <string> // Required for std::string
 
-// Define vector and CFrame structs first
+// Define 
+// and CFrame structs first
 
 struct Matrix3 {
     float data[9]; // Represents a 3x3 matrix
@@ -20,6 +21,7 @@ namespace vars
 {
     namespace esp
     {
+
         inline bool toggled = true;
         inline bool show_health = true;
         inline bool show_distance = true;
@@ -28,12 +30,23 @@ namespace vars
         inline bool show_box = true;
         inline bool hide_dead = true;
         inline bool hide_teammates = true;
+        inline bool show_fps = true;
+        inline bool show_weapon = true;
 
         inline ImColor esp_box_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_name_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_distance_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_skeleton_color = ImColor(255, 0, 0, 255);
         inline ImColor esp_tracer_color = ImColor(255, 255, 255, 255);
+    }
+
+    namespace triggerbot
+    {
+        inline bool toggled = false;
+        inline int activation_key = VK_XBUTTON1;
+        inline float fov = 15.0f;
+        inline int delay = 50;
+        inline int hold_time = 50;
     }
 
     namespace aimbot
@@ -108,12 +121,6 @@ namespace vars
     {
         inline bool toggled = false;
         inline float interval = 15.0f;
-    }
-
-    namespace exploits
-    {
-        inline bool enabled = false;
-        inline bool friendly_fire = false;
     }
 
     namespace lag_switch

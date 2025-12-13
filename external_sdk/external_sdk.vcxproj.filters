@@ -105,9 +105,6 @@
     <ClCompile Include="game\features\airswim\airswim.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="game\features\exploits\exploits.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.hpp">
@@ -212,7 +209,7 @@
     <ClInclude Include="game\features\airswim\airswim.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="game\features\exploits\exploits.hpp">
+    <ClInclude Include="math.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

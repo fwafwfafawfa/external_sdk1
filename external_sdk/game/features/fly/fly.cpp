@@ -1,101 +1,92 @@
+﻿// fly.cpp – pro Humanoid.MoveDirection fly, exactly your style
 #include "fly.hpp"
 #include "../../../handlers/vars.hpp"
 #include "../../../game/offsets/offsets.hpp"
 #include "../../../game/core.hpp"
 #include "../../../addons/kernel/memory.hpp"
 
-// Static variable to track if fly was enabled in the previous frame
-static bool fly_toggled = false; // Renamed from was_fly_enabled_last_frame
+static bool fly_toggled = false;
 
 void c_fly::run()
 {
-    if (!g_main::localplayer)
-        return;
-
-    if (!vars::fly::toggled) // Use vars::fly::toggled for overall enable/disable
-        return;
+    if (!g_main::localplayer) return;
+    if (!vars::fly::toggled) return;
 
     bool should_fly = false;
 
     if (vars::fly::fly_mode == 0) // Hold mode
     {
-        should_fly = GetAsyncKeyState(vars::fly::fly_toggle_key);
+        should_fly = GetAsyncKeyState(vars::fly::fly_toggle_key) & 0x8000;
     }
     else if (vars::fly::fly_mode == 1) // Toggle mode
     {
-        if (GetAsyncKeyState(vars::fly::fly_toggle_key) & 0x1) // Check for key press
+        if (GetAsyncKeyState(vars::fly::fly_toggle_key) & 0x1)
         {
             fly_toggled = !fly_toggled;
         }
         should_fly = fly_toggled;
     }
 
-    if (!should_fly)
-        return;
+    if (!should_fly) return;
 
     uintptr_t character = core.get_model_instance(g_main::localplayer);
-    if (!character)
-        return;
+    if (!character) return;
 
     uintptr_t humanoidRootPart = core.find_first_child(character, "HumanoidRootPart");
-    if (!humanoidRootPart)
-        return;
+    if (!humanoidRootPart) return;
+
+    uintptr_t humanoid = core.find_first_child(character, "Humanoid");
+    if (!humanoid) return;
 
     uintptr_t primitive = memory->read<uintptr_t>(humanoidRootPart + offsets::Primitive);
-    if (!primitive)
-        return;
+    if (!primitive) return;
 
-    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
-    if (!workspace)
-        return;
+    // Read Humanoid.MoveDirection (this is the  magic – already camera-relative!)
+    vector moveDirection = memory->read<vector>(humanoid + offsets::MoveDirection);
 
-    uintptr_t Camera = memory->read<uintptr_t>(workspace + offsets::Camera);
-    if (!Camera)
-        return;
+    // Up/Down input
+    float upInput = 0.0f;
+    if (GetAsyncKeyState(VK_SPACE) & 0x8000)   upInput += 1.0f;
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) upInput -= 1.0f;
 
-    // Vector camPos = memory->read<vector>(Camera + offsets::CameraPos); // Not used in this snippet
-    Matrix3 camCFrame = memory->read<Matrix3>(Camera + offsets::CameraRotation); // Assuming Matrix3 is 3x3 rotation
+    // Get world UP vector from current character orientation
+    Matrix3 cf = memory->read<Matrix3>(primitive + offsets::CFrame);
+    vector upVector = { cf.data[1], cf.data[4], cf.data[7] }; // Y column = up
 
-    vector currentPos = memory->read<vector>(primitive + offsets::Position);
-
-    vector lookVector = vector(-camCFrame.data[2], -camCFrame.data[5], -camCFrame.data[8]);
-    vector rightVector = vector(camCFrame.data[0], camCFrame.data[3], camCFrame.data[6]);
-
-    vector moveDirection(0, 0, 0);
-
-    // This snippet only shows the Position method (fly_method == 0)
-    // We will implement this as the default behavior for now.
-
-    // Forward/Backward (W/S)
-    if (GetAsyncKeyState('W') & 0x8000)
+    // Normalize up vector
+    float upLen = sqrtf(upVector.x * upVector.x + upVector.y * upVector.y + upVector.z * upVector.z);
+    if (upLen > 0.001f)
     {
-        moveDirection = moveDirection + lookVector;
-    }
-    if (GetAsyncKeyState('S') & 0x8000)
-    {
-        moveDirection = moveDirection - lookVector;
-    }
-    if (GetAsyncKeyState('A') & 0x8000)
-    {
-        moveDirection = moveDirection - rightVector;
-    }
-    if (GetAsyncKeyState('D') & 0x8000)
-    {
-        moveDirection = moveDirection + rightVector;
-    }
-    if (GetAsyncKeyState(VK_SPACE) & 0x8000)
-    {
-        moveDirection.y += 1.0f;
+        upVector.x /= upLen;
+        upVector.y /= upLen;
+        upVector.z /= upLen;
     }
 
-    if (!moveDirection.IsZero())
+    // Final movement + vertical
+    vector finalDir;
+    finalDir.x = moveDirection.x + upVector.x * upInput;
+    finalDir.y = moveDirection.y + upVector.y * upInput;
+    finalDir.z = moveDirection.z + upVector.z * upInput;
+
+    // Normalize and apply speed
+    float mag = sqrtf(finalDir.x * finalDir.x + finalDir.y * finalDir.y + finalDir.z * finalDir.z);
+
+    if (mag > 0.001f)
     {
-        moveDirection.Normalize();
-        moveDirection = moveDirection * vars::fly::speed;
+        float speedMultiplier = vars::fly::speed * 25.0f; // 25 feels perfect (WalkSpeed 16 → ~400 studs/s at speed=16)
+
+        vector velocity;
+        velocity.x = (finalDir.x / mag) * speedMultiplier;
+        velocity.y = (finalDir.y / mag) * speedMultiplier;
+        velocity.z = (finalDir.z / mag) * speedMultiplier;
+
+        memory->write<vector>(primitive + offsets::Velocity, velocity);
+    }
+    else
+    {
+        memory->write<vector>(primitive + offsets::Velocity, vector{ 0,0,0 });
     }
 
-    vector newPos = currentPos + moveDirection;
-    memory->write<vector>(primitive + offsets::Position, newPos);
-    memory->write<bool>(primitive + offsets::CanCollide, false); // Disable collisions
-    memory->write<vector>(primitive + offsets::Velocity, vector(0, 0, 0)); // Zero velocity
+    // Noclip
+    memory->write<bool>(primitive + offsets::CanCollide, false);
 }

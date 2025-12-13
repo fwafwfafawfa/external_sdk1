@@ -1,173 +1,183 @@
-#include "freecam.hpp"
-#include "../../../main.hpp"
-#include <Windows.h>
-#include <cmath>
-#include "../../../handlers/utility/utility.hpp"
+﻿#include "freecam.hpp"
 #include "../../../handlers/vars.hpp"
+#include "../../../game/offsets/offsets.hpp"
+#include "../../../game/core.hpp"
+#include "../../../addons/kernel/memory.hpp"
+#include <Windows.h>
+#include <iostream>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+static bool init = false;
+static uintptr_t saved_primitive = 0;
+static vector stored_pos = { 0, 0, 0 };
+static float yaw = 0.0f;
+static float pitch = 0.0f;
+static bool mouse_down = false;
+static POINT locked_cursor = { 0, 0 };
 
-CFrame create_identity_cframe() {
-    CFrame cf = {};
-    cf.R00 = 1.f; cf.R01 = 0.f; cf.R02 = 0.f;
-    cf.R10 = 0.f; cf.R11 = 1.f; cf.R12 = 0.f;
-    cf.R20 = 0.f; cf.R21 = 0.f; cf.R22 = 1.f;
-    cf.X = 0.f; cf.Y = 0.f; cf.Z = 0.f;
-    return cf;
-}
+void c_freecam::run(float dt)
+{
+    if (!g_main::localplayer) return;
 
-CFrame multiply_cframes(const CFrame& c1, const CFrame& c2) {
-    CFrame result;
-    result.R00 = c1.R00 * c2.R00 + c1.R01 * c2.R10 + c1.R02 * c2.R20;
-    result.R01 = c1.R00 * c2.R01 + c1.R01 * c2.R11 + c1.R02 * c2.R21;
-    result.R02 = c1.R00 * c2.R02 + c1.R01 * c2.R12 + c1.R02 * c2.R22;
-    result.R10 = c1.R10 * c2.R00 + c1.R11 * c2.R10 + c1.R12 * c2.R20;
-    result.R11 = c1.R10 * c2.R01 + c1.R11 * c2.R11 + c1.R12 * c2.R21;
-    result.R12 = c1.R10 * c2.R02 + c1.R11 * c2.R12 + c1.R12 * c2.R22;
-    result.R20 = c1.R20 * c2.R00 + c1.R21 * c2.R10 + c1.R22 * c2.R20;
-    result.R21 = c1.R20 * c2.R01 + c1.R21 * c2.R11 + c1.R22 * c2.R21;
-    result.R22 = c1.R20 * c2.R02 + c1.R21 * c2.R12 + c1.R22 * c2.R22;
-    result.X = c1.R00 * c2.X + c1.R01 * c2.Y + c1.R02 * c2.Z + c1.X;
-    result.Y = c1.R10 * c2.X + c1.R11 * c2.Y + c1.R12 * c2.Z + c1.Y;
-    result.Z = c1.R20 * c2.X + c1.R21 * c2.Y + c1.R22 * c2.Z + c1.Z;
-    return result;
-}
-
-CFrame create_yaw_cframe(float yaw) {
-    CFrame cf = create_identity_cframe();
-    float cos_yaw = cosf(yaw);
-    float sin_yaw = sinf(yaw);
-    cf.R00 = cos_yaw; cf.R02 = -sin_yaw;
-    cf.R20 = sin_yaw; cf.R22 = cos_yaw;
-    return cf;
-}
-
-CFrame create_pitch_cframe(float pitch) {
-    CFrame cf = create_identity_cframe();
-    float cos_pitch = cosf(pitch);
-    float sin_pitch = sinf(pitch);
-    cf.R11 = cos_pitch; cf.R12 = sin_pitch;
-    cf.R21 = -sin_pitch; cf.R22 = cos_pitch;
-    return cf;
-}
-
-CFrame lerp_cframe(const CFrame& a, const CFrame& b, float t) {
-    CFrame result;
-    result.R00 = a.R00 * (1.f - t) + b.R00 * t;
-    result.R01 = a.R01 * (1.f - t) + b.R01 * t;
-    result.R02 = a.R02 * (1.f - t) + b.R02 * t;
-    result.R10 = a.R10 * (1.f - t) + b.R10 * t;
-    result.R11 = a.R11 * (1.f - t) + b.R11 * t;
-    result.R12 = a.R12 * (1.f - t) + b.R12 * t;
-    result.R20 = a.R20 * (1.f - t) + b.R20 * t;
-    result.R21 = a.R21 * (1.f - t) + b.R21 * t;
-    result.R22 = a.R22 * (1.f - t) + b.R22 * t;
-    result.X = a.X * (1.f - t) + b.X * t;
-    result.Y = a.Y * (1.f - t) + b.Y * t;
-    result.Z = a.Z * (1.f - t) + b.Z * t;
-    return result;
-}
-
-void c_freecam::run(float dt) {
-    util.m_print("freecam::run() called");
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
-    if (!workspace) {
-        util.m_print("freecam: Workspace not found");
-        if (rotating) {
-            ShowCursor(true);
-            rotating = false;
-        }
-        return;
-    }
-    uintptr_t camera_ptr = memory->read<uintptr_t>(workspace + offsets::Camera);
-    if (!camera_ptr) {
-        util.m_print("freecam: Camera pointer not found");
-        if (rotating) {
-            ShowCursor(true);
-            rotating = false;
-        }
-        return;
-    }
-    util.m_print("freecam: Camera Ptr: 0x%llX", camera_ptr);
+    if (!workspace) return;
 
-    if (!enabled) {
-        if (original_camera_type != -1) {
-            util.m_print("freecam: Restoring original camera type");
-            memory->write<int>(camera_ptr + offsets::CameraType, original_camera_type);
-            original_camera_type = -1;
-            if (rotating) {
-                ShowCursor(true);
-                rotating = false;
+    uintptr_t cam = memory->read<uintptr_t>(workspace + offsets::Camera);
+    if (!cam) return;
+
+    if (vars::freecam::toggled && !init)
+    {
+        uintptr_t character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+
+        if (character) {
+            uintptr_t rootpart = core.find_first_child(character, "HumanoidRootPart");
+
+            if (rootpart) {
+                saved_primitive = memory->read<uintptr_t>(rootpart + offsets::Primitive);
+
+                if (saved_primitive) {
+                    uint8_t anchored_byte = memory->read<uint8_t>(saved_primitive + offsets::Anchored);
+                    anchored_byte |= offsets::AnchoredMask;
+                    memory->write<uint8_t>(saved_primitive + offsets::Anchored, anchored_byte);
+                }
             }
         }
+
+        stored_pos = memory->read<vector>(cam + offsets::CameraPos);
+        yaw = 0.0f;
+        pitch = 0.0f;
+
+        std::cout << "[FREECAM] Enabled" << std::endl;
+
+        init = true;
+    }
+
+    if (!vars::freecam::toggled && init)
+    {
+        std::cout << "[FREECAM] Disabling..." << std::endl;
+
+        uintptr_t character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+        std::cout << "[FREECAM] Character: " << std::hex << character << std::dec << std::endl;
+
+        if (character) {
+            uintptr_t humanoid = core.find_first_child_class(character, "Humanoid");
+            std::cout << "[FREECAM] Humanoid: " << std::hex << humanoid << std::dec << std::endl;
+
+            if (humanoid) {
+                memory->write<uintptr_t>(cam + offsets::CameraSubject, humanoid);
+                std::cout << "[FREECAM] Set CameraSubject to Humanoid" << std::endl;
+            }
+        }
+
+        memory->write<int>(cam + offsets::CameraType, 5);
+        std::cout << "[FREECAM] Set CameraType to 5" << std::endl;
+
+        if (saved_primitive) {
+            uint8_t anchored_byte = memory->read<uint8_t>(saved_primitive + offsets::Anchored);
+            std::cout << "[FREECAM] Anchored byte before: " << (int)anchored_byte << std::endl;
+            anchored_byte &= ~offsets::AnchoredMask;
+            memory->write<uint8_t>(saved_primitive + offsets::Anchored, anchored_byte);
+            std::cout << "[FREECAM] Unanchored player" << std::endl;
+            saved_primitive = 0;
+        }
+
+        if (mouse_down) {
+            ShowCursor(TRUE);
+            mouse_down = false;
+        }
+
+        std::cout << "[FREECAM] Disabled" << std::endl;
+
+        init = false;
         return;
     }
 
-    if (original_camera_type == -1) {
-        util.m_print("freecam: Setting CameraType to Scriptable (6)");
-        original_camera_type = memory->read<int>(camera_ptr + offsets::CameraType);
-        memory->write<int>(camera_ptr + offsets::CameraType, 6);
-    }
+    if (vars::freecam::toggled)
+    {
+        memory->write<int>(cam + offsets::CameraType, 6);
+        memory->write<uintptr_t>(cam + offsets::CameraSubject, 0);
 
-    CFrame current_cframe = memory->read<CFrame>(camera_ptr + offsets::CFrame);
-    CFrame final_cframe = current_cframe;
+        bool rmb = (GetAsyncKeyState(VK_RBUTTON) & 0x8000);
 
-    if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) {
-        static POINT last_pos = { 0, 0 };
-        if (!rotating) {
-            rotating = true;
-            GetCursorPos(&last_pos);
-            ShowCursor(false);
-            util.m_print("freecam: Started rotating");
+        if (rmb && !mouse_down)
+        {
+            GetCursorPos(&locked_cursor);
+            ShowCursor(FALSE);
+            mouse_down = true;
         }
-        POINT current_pos;
-        GetCursorPos(&current_pos);
-        int deltaX = current_pos.x - last_pos.x;
-        int deltaY = current_pos.y - last_pos.y;
-        SetCursorPos(last_pos.x, last_pos.y);
+        else if (!rmb && mouse_down)
+        {
+            ShowCursor(TRUE);
+            mouse_down = false;
+        }
 
-        float yaw_change = -deltaX * vars::freecam::sensitivity;
-        float pitch_change = -deltaY * vars::freecam::sensitivity;
+        if (mouse_down)
+        {
+            POINT cur;
+            GetCursorPos(&cur);
 
-        vector pos = { final_cframe.X, final_cframe.Y, final_cframe.Z };
-        final_cframe.X = final_cframe.Y = final_cframe.Z = 0;
+            int dx = cur.x - locked_cursor.x;
+            int dy = cur.y - locked_cursor.y;
 
-        CFrame yaw_rot = create_yaw_cframe(yaw_change);
-        CFrame pitch_rot = create_pitch_cframe(pitch_change);
+            if (dx != 0 || dy != 0)
+            {
+                yaw -= dx * 0.003f;
+                pitch += dy * 0.003f;
+                pitch = fmaxf(-1.55f, fminf(1.55f, pitch));
+                SetCursorPos(locked_cursor.x, locked_cursor.y);
+            }
+        }
 
-        final_cframe = multiply_cframes(yaw_rot, final_cframe);
-        final_cframe = multiply_cframes(final_cframe, pitch_rot);
+        if (GetAsyncKeyState(VK_RIGHT) & 0x8000) yaw += 0.03f;
+        if (GetAsyncKeyState(VK_LEFT) & 0x8000) yaw -= 0.03f;
+        if (GetAsyncKeyState(VK_UP) & 0x8000) pitch += 0.03f;
+        if (GetAsyncKeyState(VK_DOWN) & 0x8000) pitch -= 0.03f;
 
-        final_cframe.X = pos.x; final_cframe.Y = pos.y; final_cframe.Z = pos.z;
+        pitch = fmaxf(-1.55f, fminf(1.55f, pitch));
 
+        float speed = vars::freecam::speed;
+        if (GetAsyncKeyState(VK_SHIFT) & 0x8000) speed *= 0.25f;
+
+        float cy = cosf(yaw);
+        float sy = sinf(yaw);
+        float cp = cosf(pitch);
+        float sp = sinf(pitch);
+
+        Matrix3 rot;
+        rot.data[0] = cy;
+        rot.data[1] = 0;
+        rot.data[2] = -sy;
+        rot.data[3] = sy * sp;
+        rot.data[4] = cp;
+        rot.data[5] = cy * sp;
+        rot.data[6] = sy * cp;
+        rot.data[7] = -sp;
+        rot.data[8] = cy * cp;
+
+        vector forward = { rot.data[2], rot.data[5], rot.data[8] };
+        vector right = { rot.data[0], rot.data[3], rot.data[6] };
+
+        if (GetAsyncKeyState('W') & 0x8000) {
+            stored_pos.x -= forward.x * speed;
+            stored_pos.y -= forward.y * speed;
+            stored_pos.z -= forward.z * speed;
+        }
+        if (GetAsyncKeyState('S') & 0x8000) {
+            stored_pos.x += forward.x * speed;
+            stored_pos.y += forward.y * speed;
+            stored_pos.z += forward.z * speed;
+        }
+        if (GetAsyncKeyState('A') & 0x8000) {
+            stored_pos.x -= right.x * speed;
+            stored_pos.z -= right.z * speed;
+        }
+        if (GetAsyncKeyState('D') & 0x8000) {
+            stored_pos.x += right.x * speed;
+            stored_pos.z += right.z * speed;
+        }
+        if (GetAsyncKeyState(VK_SPACE) & 0x8000) stored_pos.y += speed;
+        if (GetAsyncKeyState(VK_CONTROL) & 0x8000) stored_pos.y -= speed;
+
+        memory->write<Matrix3>(cam + offsets::CameraRotation, rot);
+        memory->write<vector>(cam + offsets::CameraPos, stored_pos);
     }
-    else if (rotating) {
-        ShowCursor(true);
-        rotating = false;
-        util.m_print("freecam: Stopped rotating");
-    }
-
-    float speed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? vars::freecam::speed * 2.0f : vars::freecam::speed;
-    float frame_speed = speed * dt;
-    vector local_move_dir = {};
-
-    if (GetAsyncKeyState('W') & 0x8000) local_move_dir.z -= frame_speed;
-    if (GetAsyncKeyState('S') & 0x8000) local_move_dir.z += frame_speed;
-    if (GetAsyncKeyState('A') & 0x8000) local_move_dir.x -= frame_speed;
-    if (GetAsyncKeyState('D') & 0x8000) local_move_dir.x += frame_speed;
-    if (GetAsyncKeyState(VK_SPACE) & 0x8000) local_move_dir.y += frame_speed;
-    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) local_move_dir.y -= frame_speed;
-
-    util.m_print("freecam: Local Move Dir: X: %.2f, Y: %.2f, Z: %.2f", local_move_dir.x, local_move_dir.y, local_move_dir.z);
-
-    final_cframe.X += final_cframe.R00 * local_move_dir.x + final_cframe.R01 * local_move_dir.y + final_cframe.R02 * local_move_dir.z;
-    final_cframe.Y += final_cframe.R10 * local_move_dir.x + final_cframe.R11 * local_move_dir.y + final_cframe.R12 * local_move_dir.z;
-    final_cframe.Z += final_cframe.R20 * local_move_dir.x + final_cframe.R21 * local_move_dir.y + final_cframe.R22 * local_move_dir.z;
-
-    util.m_print("freecam: Final CFrame Pos: X: %.2f, Y: %.2f, Z: %.2f", final_cframe.X, final_cframe.Y, final_cframe.Z);
-
-    CFrame lerped_frame = lerp_cframe(current_cframe, final_cframe, 0.3f);
-    memory->write(camera_ptr + offsets::CFrame, lerped_frame);
 }

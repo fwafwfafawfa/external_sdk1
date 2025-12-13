@@ -46,7 +46,7 @@ void c_feature_handler::start(uintptr_t datamodel)
 
 
     freecam.enabled = vars::freecam::toggled;
-    if (freecam.enabled) {
+    {
         freecam.run(dt.count());
     }
 

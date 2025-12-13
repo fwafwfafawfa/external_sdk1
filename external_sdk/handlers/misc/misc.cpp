@@ -236,7 +236,6 @@ void c_misc::run_anti_afk()
 
     std::thread([]()
         {
-            util.m_print("antiafking");
 
             while (vars::anti_afk::toggled)
             {
@@ -259,7 +258,6 @@ void c_misc::run_anti_afk()
                 std::this_thread::sleep_for(std::chrono::seconds(5));
             }
 
-            util.m_print("no more antiafk");
             running = false;
         }).detach();
 }

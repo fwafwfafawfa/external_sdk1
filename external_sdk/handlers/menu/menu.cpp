@@ -3,12 +3,10 @@
 #include "../vars.hpp"
 #include "../themes/theme.hpp"
 #include "../../game/features/player_info/player_info.hpp"
-#include "../../game/features/exploits/exploits.hpp"
 
-// Helper function to convert virtual key codes to strings
-static std::string virtual_key_to_string( int virtual_key )
+static std::string virtual_key_to_string(int virtual_key)
 {
-    switch ( virtual_key )
+    switch (virtual_key)
     {
     case VK_LBUTTON: return "Left Mouse";
     case VK_RBUTTON: return "Right Mouse";
@@ -121,7 +119,7 @@ static std::string virtual_key_to_string( int virtual_key )
     case VK_OEM_4: return "[";
     case VK_OEM_5: return "\\";
     case VK_OEM_6: return "]";
-    case VK_OEM_7: return "'" ;
+    case VK_OEM_7: return "'";
     case VK_OEM_8: return "!";
     case VK_PROCESSKEY: return "Process Key";
     case VK_ATTN: return "Attn";
@@ -135,94 +133,126 @@ static std::string virtual_key_to_string( int virtual_key )
     case VK_OEM_CLEAR: return "OEM Clear";
     }
 
-    if ( virtual_key >= 0x30 && virtual_key <= 0x39 ) // 0-9
-        return std::string( 1, static_cast<char>( virtual_key ) );
+    if (virtual_key >= 0x30 && virtual_key <= 0x39)
+        return std::string(1, static_cast<char>(virtual_key));
 
-    if ( virtual_key >= 0x41 && virtual_key <= 0x5A ) // A-Z
-        return std::string( 1, static_cast<char>( virtual_key ) );
+    if (virtual_key >= 0x41 && virtual_key <= 0x5A)
+        return std::string(1, static_cast<char>(virtual_key));
 
     return "Unknown";
 }
 
-void c_menu::setup_main_window( )
+void c_menu::setup_main_window()
 {
-    ImGuiIO& io = ImGui::GetIO( );
+    ImGuiIO& io = ImGui::GetIO();
     ImVec2 display_size = io.DisplaySize;
 
-    ImVec2 centered_pos = { ( display_size.x - 500 ) * 0.5f, ( display_size.y - 400 ) * 0.5f };
+    ImVec2 centered_pos = { (display_size.x - 500) * 0.5f, (display_size.y - 400) * 0.5f };
 
-    ImGui::SetNextWindowSize( { 500, 400 } );
-    ImGui::SetNextWindowPos( centered_pos );
+    ImGui::SetNextWindowSize({ 500, 400 });
+    ImGui::SetNextWindowPos(centered_pos);
 
     this->is_initialized = true;
 }
 
 #include "../game/features/noclip/noclip.hpp"
 
-void c_menu::run_main_window( )
+void c_menu::run_main_window()
 {
-    if ( !this->is_initialized )
-        this->setup_main_window( );
+    if (!this->is_initialized)
+        this->setup_main_window();
 
-    ImGui::Begin( "Made by Buko0365(PRE ALPHA VER 6)" );
+    ImGui::Begin("Made by Buko0365(PRE ALPHA VER 6)", nullptr, ImGuiWindowFlags_NoCollapse);
 
-    if (ImGui::BeginTabBar("##Tabs"))
+    if (ImGui::BeginTabBar("##Tabs", ImGuiTabBarFlags_None))
     {
         if (ImGui::BeginTabItem("ESP"))
         {
-            ImGui::Checkbox( "ESP", &vars::esp::toggled );
-            ImGui::Checkbox( "Show Box", &vars::esp::show_box );
-            ImGui::Checkbox( "Show Tracers", &vars::esp::show_tracers );
-            ImGui::Checkbox( "Show Health", &vars::esp::show_health );
-            ImGui::Checkbox( "Show Distance", &vars::esp::show_distance );
-            ImGui::Checkbox( "Show Skeleton", &vars::esp::show_skeleton );
-            ImGui::Checkbox( "Hide Dead Players", &vars::esp::hide_dead );
-            ImGui::Checkbox( "Hide Teammates", &vars::esp::hide_teammates );
+            ImGui::Checkbox("Show Box", &vars::esp::show_box);
+            ImGui::Checkbox("Show Tracers", &vars::esp::show_tracers);
+            ImGui::Checkbox("Show Skeleton", &vars::esp::show_skeleton);
+            ImGui::Checkbox("Show Health", &vars::esp::show_health);
+            ImGui::Checkbox("Show Distance", &vars::esp::show_distance);
+            ImGui::Checkbox("Show Weapon", &vars::esp::show_weapon);
+            ImGui::Checkbox("Show FPS", &vars::esp::show_fps);
+            ImGui::Checkbox("Hide Teammates", &vars::esp::hide_teammates);
+            ImGui::Checkbox("Hide Dead", &vars::esp::hide_dead);
 
-            ImGui::Separator();
-            ImGui::Text("ESP Colors");
             ImGui::ColorEdit4("Box Color", (float*)&vars::esp::esp_box_color);
+            ImGui::ColorEdit4("Tracer Color", (float*)&vars::esp::esp_tracer_color);
+            ImGui::ColorEdit4("Skeleton Color", (float*)&vars::esp::esp_skeleton_color);
             ImGui::ColorEdit4("Name Color", (float*)&vars::esp::esp_name_color);
             ImGui::ColorEdit4("Distance Color", (float*)&vars::esp::esp_distance_color);
-            ImGui::ColorEdit4("Skeleton Color", (float*)&vars::esp::esp_skeleton_color);
-            ImGui::ColorEdit4("Tracer Color", (float*)&vars::esp::esp_tracer_color);
+
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Aimbot"))
         {
-            ImGui::Checkbox( "Aimbot", &vars::aimbot::toggled );
-            ImGui::SliderFloat( "Aimbot FOV", &vars::aimbot::fov, 1.0f, 200.0f );
-            ImGui::SliderFloat( "Aimbot Speed", &vars::aimbot::speed, 1.0f, 40.0f );
-            ImGui::SliderFloat( "Aimbot Deadzone", &vars::aimbot::deadzone, 0.0f, 20.0f );
-            ImGui::Checkbox( "Press and your aimbot will stop working wagwhaijndjd[jjprkupoie[6i9uojfoieajfoahiogoagohgagagagangkbxkafafbafbafiafiafaifafaigiangaigpuaghwiutp;kmbfxnbibnxfkabnjabaghwaghawhguiwahgiuhahgugawfwafhwahgiawhgiahgawuighuawigawghwuiaghwiaghwuaghuiaghuiawgawguuagiuihawigighaoguiNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERNIGGERpaogjpajgpajgpapojogwpjagpaghajb;fnmn[dnhda", &vars::aimbot::use_set_cursor_pos );
-            ImGui::SliderFloat( "Aimbot Smoothing", &vars::aimbot::smoothing_factor, 0.0f, 1.0f );
-            ImGui::Checkbox( "Show FOV Circle", &vars::aimbot::show_fov_circle ); // New: Toggle for FOV circle
-            ImGui::Checkbox( "Prediction", &vars::aimbot::prediction ); // New: Toggle for Prediction
+            ImGui::Checkbox("Aimbot", &vars::aimbot::toggled);
+            ImGui::SliderFloat("Aimbot FOV", &vars::aimbot::fov, 1.0f, 200.0f);
+            ImGui::SliderFloat("Aimbot Speed", &vars::aimbot::speed, 1.0f, 40.0f);
+            ImGui::SliderFloat("Aimbot Deadzone", &vars::aimbot::deadzone, 0.0f, 20.0f);
+            ImGui::Checkbox("Use SetCursorPos", &vars::aimbot::use_set_cursor_pos);
+            ImGui::SliderFloat("Aimbot Smoothing", &vars::aimbot::smoothing_factor, 0.0f, 1.0f);
+            ImGui::Checkbox("Show FOV Circle", &vars::aimbot::show_fov_circle);
+            ImGui::Checkbox("Prediction", &vars::aimbot::prediction);
 
             const char* hitboxes[] = { "Head", "Body" };
             ImGui::Combo("Hitbox", &vars::aimbot::aimbot_hitbox, hitboxes, IM_ARRAYSIZE(hitboxes));
 
-            // Key selection for Aimbot activation
-            std::string button_text = "Aimbot Key: " + virtual_key_to_string( vars::aimbot::activation_key );
-            if ( awaiting_key_press )
+            std::string button_text = "Aimbot Key: " + virtual_key_to_string(vars::aimbot::activation_key);
+            static bool awaiting_aimbot_key = false;
+            if (awaiting_aimbot_key)
                 button_text = "Press a key...";
 
-            if ( ImGui::Button( button_text.c_str( ) ) )
-                awaiting_key_press = true;
+            if (ImGui::Button(button_text.c_str()))
+                awaiting_aimbot_key = true;
 
-            if ( awaiting_key_press )
+            if (awaiting_aimbot_key)
             {
-                for ( int i = 1; i < 256; i++ )
+                for (int i = 1; i < 256; i++)
                 {
-                    if ( GetAsyncKeyState( i ) & 0x8000 )
+                    if (GetAsyncKeyState(i) & 0x8000)
                     {
                         vars::aimbot::activation_key = i;
-                        awaiting_key_press = false;
+                        awaiting_aimbot_key = false;
                         break;
                     }
                 }
             }
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Triggerbot"))
+        {
+            ImGui::Checkbox("Enable Triggerbot", &vars::triggerbot::toggled);
+
+            ImGui::SliderFloat("Triggerbot FOV", &vars::triggerbot::fov, 1.0f, 50.0f);
+            ImGui::SliderInt("Delay (ms)", &vars::triggerbot::delay, 0, 500);
+            ImGui::SliderInt("Hold Time (ms)", &vars::triggerbot::hold_time, 10, 200);
+
+            std::string triggerbot_button_text = "Triggerbot Key: " + virtual_key_to_string(vars::triggerbot::activation_key);
+            static bool awaiting_triggerbot_key = false;
+            if (awaiting_triggerbot_key)
+                triggerbot_button_text = "Press a key...";
+
+            if (ImGui::Button(triggerbot_button_text.c_str()))
+                awaiting_triggerbot_key = true;
+
+            if (awaiting_triggerbot_key)
+            {
+                for (int i = 1; i < 256; i++)
+                {
+                    if (GetAsyncKeyState(i) & 0x8000)
+                    {
+                        vars::triggerbot::activation_key = i;
+                        awaiting_triggerbot_key = false;
+                        break;
+                    }
+                }
+            }
+
             ImGui::EndTabItem();
         }
 
@@ -232,19 +262,19 @@ void c_menu::run_main_window( )
             ImGui::SetColumnWidth(0, ImGui::GetWindowWidth() * 0.4f);
 
             ImGui::Text("Player List:");
-            std::vector< uintptr_t > players = core.get_players( g_main::datamodel );
+            std::vector< uintptr_t > players = core.get_players(g_main::datamodel);
             if (players.empty())
             {
                 ImGui::Text("No players found.");
             }
             else
             {
-                for ( auto& player_instance : players )
+                for (auto& player_instance : players)
                 {
-                    if ( !player_instance )
+                    if (!player_instance)
                         continue;
-                    std::string player_name = core.get_instance_name( player_instance );
-                    
+                    std::string player_name = core.get_instance_name(player_instance);
+
                     if (ImGui::Selectable(player_name.c_str(), vars::misc::selected_player_for_info == player_instance))
                     {
                         vars::misc::selected_player_for_info = player_instance;
@@ -263,35 +293,35 @@ void c_menu::run_main_window( )
 
         if (ImGui::BeginTabItem("Movement"))
         {
-            ImGui::Checkbox( "Freecam", &vars::freecam::toggled );
-            ImGui::Checkbox( "Noclip", &vars::noclip::toggled );
-            ImGui::Checkbox( "Fly (credits to world_to_client)", &vars::fly::toggled );
-            ImGui::Checkbox( "idk", &vars::airswim::toggled );
+
+            ImGui::Checkbox("Freecam", &vars::freecam::toggled);
+            ImGui::SliderFloat("Freecam Speed", &vars::freecam::speed, 0.1f, 10.0f);
+            ImGui::Checkbox("Noclip", &vars::noclip::toggled);
+            ImGui::Checkbox("Fly", &vars::fly::toggled);
+            ImGui::Checkbox("Airswim", &vars::airswim::toggled);
             ImGui::SliderFloat("Fly Speed", &vars::fly::speed, 0.1f, 2.0f);
-            
-            // Fly Key selection
-            std::string fly_button_text = "Fly Key: " + virtual_key_to_string( vars::fly::fly_toggle_key );
-            static bool awaiting_fly_key_press = false;
-            if ( awaiting_fly_key_press )
+
+            std::string fly_button_text = "Fly Key: " + virtual_key_to_string(vars::fly::fly_toggle_key);
+            static bool awaiting_fly_key = false;
+            if (awaiting_fly_key)
                 fly_button_text = "Press a key...";
 
-            if ( ImGui::Button( fly_button_text.c_str( ) ) )
-                awaiting_fly_key_press = true;
+            if (ImGui::Button(fly_button_text.c_str()))
+                awaiting_fly_key = true;
 
-            if ( awaiting_fly_key_press )
+            if (awaiting_fly_key)
             {
-                for ( int i = 1; i < 256; i++ )
+                for (int i = 1; i < 256; i++)
                 {
-                    if ( GetAsyncKeyState( i ) & 0x8000 )
+                    if (GetAsyncKeyState(i) & 0x8000)
                     {
                         vars::fly::fly_toggle_key = i;
-                        awaiting_fly_key_press = false;
+                        awaiting_fly_key = false;
                         break;
                     }
                 }
             }
 
-            // Fly Mode selection
             ImGui::RadioButton("Hold", &vars::fly::fly_mode, 0);
             ImGui::SameLine();
             ImGui::RadioButton("Toggle", &vars::fly::fly_mode, 1);
@@ -317,17 +347,6 @@ void c_menu::run_main_window( )
             ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f, "%.1f");
             ImGui::Checkbox("Anti-AFK", &vars::anti_afk::toggled);
             ImGui::SliderFloat("AFK Interval", &vars::anti_afk::interval, 5.0f, 300.0f, "%.1f s");
-
-
-            // Exploits -> Friendly Fire toggle
-            ImGui::Separator();
-            ImGui::Text("Exploits");
-            ImGui::Checkbox("Enable Exploits", &vars::exploits::enabled);
-            ImGui::Checkbox("Friendly Fire", &vars::exploits::friendly_fire);
-            if (vars::exploits::enabled && vars::exploits::friendly_fire) {
-                // start the exploits thread
-                exploits::allow_friendly_fire();
-            }
 
             if (ImGui::Button("Fun Button"))
             {
@@ -379,14 +398,14 @@ void c_menu::run_main_window( )
         config.load("settings.ini");
     }
 
-    ImGui::End( );
+    ImGui::End();
 }
 
 void c_menu::debug_element()
 {
-    ImGuiIO& io = ImGui::GetIO( );
+    ImGuiIO& io = ImGui::GetIO();
 
-    draw.string( ImVec2( 10, 10 ), std::to_string( io.Framerate ).c_str( ), ImColor( 255, 255, 255, 255 ), false);
+    draw.string(ImVec2(10, 10), std::to_string(io.Framerate).c_str(), ImColor(255, 255, 255, 255), false);
 }
 
 c_menu menu;
