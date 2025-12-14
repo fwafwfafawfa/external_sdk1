@@ -22,6 +22,7 @@ std::unordered_map<uintptr_t, std::pair<bool, std::chrono::steady_clock::time_po
 std::mutex c_esp::geometry_mtx;
 std::mutex c_esp::vis_cache_mtx;
 
+
 static inline vector normalize_vec(const vector& v)
 {
     float mag = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
@@ -80,17 +81,12 @@ static float fps = 0.0f;
 static std::chrono::steady_clock::time_point trigger_fire_time = {};
 static bool trigger_waiting = false;
 
+std::unordered_map<uintptr_t, TargetData> c_esp::target_tracking;
+std::mutex c_esp::tracking_mtx;
+
 void c_esp::calculate_fps()
 {
-    using clock = std::chrono::high_resolution_clock;
-    auto now = clock::now();
-    frame_count++;
-    std::chrono::duration<float> elapsed = now - last_time;
-    if (elapsed.count() >= 0.5f) {
-        fps = frame_count / elapsed.count();
-        frame_count = 0;
-        last_time = now;
-    }
+    // Remove this entire function or leave it empty
 }
 
 void c_esp::update_world_cache()
@@ -316,12 +312,20 @@ bool c_esp::is_visible(
 void c_esp::run_players(view_matrix_t viewmatrix)
 {
     if (vars::esp::show_fps)
-    {
-        calculate_fps();
-        std::stringstream ss_fps;
-        ss_fps << "FPS: " << std::fixed << std::setprecision(0) << fps;
-        draw.outlined_string(ImVec2(10, 10), ss_fps.str().c_str(), ImColor(0, 255, 0, 255), ImColor(0, 0, 0, 255), false);
-    }
+        if (vars::esp::show_fps)
+        {
+            uintptr_t task_scheduler = memory->read<uintptr_t>(offsets::TaskSchedulerPointer);
+            if (task_scheduler)
+            {
+                // Read the frame delta time (usually around offset 0x1A0-0x1C0)
+                // Or read the FPS cap and assume it's close to that
+                float fps_cap = memory->read<float>(task_scheduler + offsets::TaskSchedulerMaxFPS);
+
+                std::stringstream ss_fps;
+                ss_fps << "FPS: " << std::fixed << std::setprecision(0) << fps_cap;
+                draw.outlined_string(ImVec2(10, 10), ss_fps.str().c_str(), ImColor(0, 255, 0, 255), ImColor(0, 0, 0, 255), false);
+            }
+        }
 
     std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
     for (auto& player : players)
@@ -582,14 +586,13 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                                 auto p_target_bone = memory->read<uintptr_t>(target_bone + offsets::Primitive);
                                 if (p_target_bone)
                                 {
+                                    auto player_root_part = core.find_first_child(model, "HumanoidRootPart");
+                                    if (!player_root_part) break;
+                                    auto p_player_root = memory->read<uintptr_t>(player_root_part + offsets::Primitive);
+                                    if (!p_player_root) break;
                                     vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
-
-                                   /// if (camera && !is_visible(cam_pos, w_target_bone_pos, model))
-                                  ///  {
-                                     ///   this->locked_target = 0;
-                                     ///   break;
-                                  ///  }
-
+                                    vector v_player_root = memory->read<vector>(p_player_root + offsets::Velocity);
+                                
                                     vector2d s_target_bone_pos;
                                     if (core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
                                     {
@@ -611,7 +614,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                 break;
             }
         }
-
+ 
         if (!locked_target_still_valid)
             this->locked_target = 0;
     }
@@ -662,11 +665,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
             vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
             vector v_player_root = memory->read<vector>(p_player_root + offsets::Velocity);
-            if (vars::aimbot::prediction)
-                w_target_bone_pos = w_target_bone_pos + (v_player_root * 0.1f);
-
-           /// if (camera && !is_visible(cam_pos, w_target_bone_pos, model))
-              ///  continue;
 
             vector2d s_target_bone_pos;
             if (!core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
@@ -677,13 +675,12 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                 powf(s_target_bone_pos.y - crosshair_pos.y, 2)
             );
 
-            if (distance < new_closest_distance && distance < search_fov)
+            if (distance < search_fov && distance < new_closest_distance)
             {
                 new_closest_distance = distance;
                 new_closest_player = player;
             }
         }
-
         current_target = new_closest_player;
         if (aimbot_active)
             this->locked_target = new_closest_player;
@@ -702,7 +699,11 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
 
         if (vars::aimbot::prediction)
-            w_target_bone_pos = w_target_bone_pos + (v_player_root * 0.1f);
+        {
+            w_target_bone_pos.x += v_player_root.x * 0.05f;  // Half the original time
+            w_target_bone_pos.y += v_player_root.y * 0.05f;
+            w_target_bone_pos.z += v_player_root.z * 0.05f;
+        }
 
         vector2d s_target_bone_pos;
         if (core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))

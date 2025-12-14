@@ -13,6 +13,13 @@ struct WorldPart
     bool large;
 };
 
+struct TargetData
+{
+    vector last_velocity;
+    vector last_position;
+    std::chrono::steady_clock::time_point last_update;
+};
+
 class c_esp
 {
 public:
@@ -29,6 +36,8 @@ public:
     static std::unordered_map<uintptr_t, std::pair<bool, std::chrono::steady_clock::time_point>> vis_cache;
     static std::mutex geometry_mtx;
     static std::mutex vis_cache_mtx;
+    static std::unordered_map<uintptr_t, TargetData> target_tracking;
+    static std::mutex tracking_mtx;
 
     void update_world_cache();
     void calculate_fps();
@@ -36,6 +45,7 @@ public:
     void run_aimbot(view_matrix_t viewmatrix);
     bool is_visible(const vector& from, const vector& to, uintptr_t target_model);
     bool is_visible(const vector& from, const vector& head, const vector& torso, const vector& pelvis, const vector& left_foot, const vector& right_foot, uintptr_t target_model);
+
 };
 
 inline c_esp esp;

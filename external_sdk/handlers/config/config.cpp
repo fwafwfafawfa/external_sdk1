@@ -110,6 +110,15 @@ void c_config::save(const std::string& filename)
         file << "aimbot_show_fov_circle=" << (vars::aimbot::show_fov_circle ? "true" : "false") << std::endl;
         file << "aimbot_prediction=" << (vars::aimbot::prediction ? "true" : "false") << std::endl;
 
+        // Triggerbot
+        file << "[triggerbot]" << std::endl;
+        file << "triggerbot_toggled=" << (vars::triggerbot::toggled ? "true" : "false") << std::endl;
+        file << "triggerbot_fov=" << vars::triggerbot::fov << std::endl;
+        file << "triggerbot_delay=" << vars::triggerbot::delay << std::endl;
+        file << "triggerbot_hold_time=" << vars::triggerbot::hold_time << std::endl;
+        file << "triggerbot_activation_key=" << vars::triggerbot::activation_key << std::endl;
+
+
         // Speed Hack
         file << "[speed_hack]" << std::endl;
         file << "speed_hack_toggled=" << (vars::speed_hack::toggled ? "true" : "false") << std::endl;
@@ -211,6 +220,14 @@ void c_config::load(const std::string& filename)
         vars::aimbot::activation_key = get_value(data, "aimbot_activation_key", vars::aimbot::activation_key);
         vars::aimbot::show_fov_circle = get_value(data, "aimbot_show_fov_circle", vars::aimbot::show_fov_circle);
         vars::aimbot::prediction = get_value(data, "aimbot_prediction", vars::aimbot::prediction);
+
+        // Triggerbot
+        vars::triggerbot::toggled = get_value(data, "triggerbot_toggled", vars::triggerbot::toggled);
+        vars::triggerbot::fov = get_value(data, "triggerbot_fov", vars::triggerbot::fov);
+        vars::triggerbot::delay = get_value(data, "triggerbot_delay", vars::triggerbot::delay);
+        vars::triggerbot::hold_time = get_value(data, "triggerbot_hold_time", vars::triggerbot::hold_time);
+        vars::triggerbot::activation_key = get_value(data, "triggerbot_activation_key", vars::triggerbot::activation_key);
+
 
         // Speed Hack
         vars::speed_hack::toggled = get_value(data, "speed_hack_toggled", vars::speed_hack::toggled);
