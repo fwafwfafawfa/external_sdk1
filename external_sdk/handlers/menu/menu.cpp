@@ -298,7 +298,6 @@ void c_menu::run_main_window()
             ImGui::SliderFloat("Freecam Speed", &vars::freecam::speed, 0.1f, 10.0f);
             ImGui::Checkbox("Noclip", &vars::noclip::toggled);
             ImGui::Checkbox("Fly", &vars::fly::toggled);
-            ImGui::Checkbox("Airswim", &vars::airswim::toggled);
             ImGui::SliderFloat("Fly Speed", &vars::fly::speed, 0.1f, 2.0f);
 
             std::string fly_button_text = "Fly Key: " + virtual_key_to_string(vars::fly::fly_toggle_key);

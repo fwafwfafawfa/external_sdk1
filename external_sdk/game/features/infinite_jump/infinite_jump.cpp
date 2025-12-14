@@ -9,7 +9,7 @@ namespace infinite_jump
     bool last_space = false;
     int cooldown = 0;
 
-    void run()
+        void run()
     {
         if (!vars::infinite_jump::toggled)
             return;

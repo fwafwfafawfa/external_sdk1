@@ -327,6 +327,8 @@ void c_esp::run_players(view_matrix_t viewmatrix)
             }
         }
 
+
+
     std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
     for (auto& player : players)
     {

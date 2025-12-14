@@ -5,46 +5,82 @@
 #include "../../../addons/kernel/memory.hpp"
 #include "../../../handlers/utility/utility.hpp"
 
-// Teleport helper that writes Position directly to the local player's primitive (no CFrame)
-static void TeleportTo(const vector& cords)
+static std::atomic<bool> spam_tp_active{ false };
+static vector spam_tp_target;
+
+void spam_tp_thread()
 {
-    if (!g_main::datamodel || !g_main::localplayer) {
-        util.m_print("TeleportTo: datamodel or localplayer missing");
-        return;
-    }
+    while (true)
+    {
+        if (!spam_tp_active)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
 
-    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
-    if (!workspace) {
-        util.m_print("TeleportTo: Workspace not found");
-        return;
-    }
+        if (!g_main::datamodel || !g_main::localplayer)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
 
-    uintptr_t local_player_character_model = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
-    if (!local_player_character_model) {
-        util.m_print("TeleportTo: Local player character model not found");
-        return;
-    }
+        uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+        if (!workspace)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
 
-    uintptr_t hrp = core.find_first_child(local_player_character_model, "HumanoidRootPart");
-    if (!hrp) {
-        util.m_print("TeleportTo: HumanoidRootPart not found");
-        return;
-    }
+        uintptr_t local_char = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+        if (!local_char)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
 
-    uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
-    if (!primitive) {
-        util.m_print("TeleportTo: primitive pointer not found for HRP: 0x%llX", hrp);
-        return;
-    }
+        uintptr_t hrp = core.find_first_child(local_char, "HumanoidRootPart");
+        if (!hrp)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
 
-    // Write position directly
-    memory->write<vector>(primitive + offsets::Position, cords);
-    vector pos_after = memory->read<vector>(primitive + offsets::Position);
-    util.m_print("TeleportTo: wrote Position to primitive 0x%llX -> (%.3f, %.3f, %.3f)", primitive, pos_after.x, pos_after.y, pos_after.z);
+        uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+        if (!primitive || primitive < 0x10000)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+
+        vector zero_vel = { 0.0f, 0.0f, 0.0f };
+        memory->write<vector>(primitive + offsets::Velocity, zero_vel);
+        memory->write<vector>(primitive + offsets::Position, spam_tp_target);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+static void TeleportTo(const vector& target)
+{
+    spam_tp_target = target;
+    spam_tp_active = true;
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    spam_tp_active = false;
+
+    util.m_print("TeleportTo: spam completed to (%.2f, %.2f, %.2f)", target.x, target.y, target.z);
 }
 
 void c_player_info::draw_player_info(uintptr_t player_instance)
 {
+    static bool thread_started = false;
+    if (!thread_started)
+    {
+        std::thread(spam_tp_thread).detach();
+        thread_started = true;
+    }
+
     if (player_instance == 0)
     {
         ImGui::Text("No player selected.");
@@ -59,7 +95,6 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
     std::string player_classname = core.get_instance_classname(player_instance);
     ImGui::Text("Class Name: %s", player_classname.c_str());
 
-    // Spectate Button
     std::string spectateID = "Spectate##" + player_name;
     if (ImGui::Button(spectateID.c_str())) {
         uintptr_t cameraptr = memory->read<uintptr_t>(core.find_first_child_class(g_main::datamodel, "Workspace") + offsets::Camera);
@@ -82,9 +117,8 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
             }
         }
     }
-    ImGui::SameLine(); // Place Teleport button on the same line
+    ImGui::SameLine();
 
-    // Teleport Button - use TeleportTo (no CFrame)
     std::string teleportID = "Teleport##" + player_name;
     if (ImGui::Button(teleportID.c_str()))
     {
@@ -109,16 +143,10 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
                 }
                 else
                 {
-                    // Read target position from player's HRP primitive
                     vector target_pos = memory->read<vector>(target_primitive_ptr + offsets::Position);
-
-                    // Apply user-defined Y/Z offsets
                     target_pos.y += vars::misc::teleport_offset_y;
                     target_pos.z += vars::misc::teleport_offset_z;
-
                     util.m_print("Teleport: Target position: (%.3f, %.3f, %.3f)", target_pos.x, target_pos.y, target_pos.z);
-
-                    // Use the direct teleport helper (no CFrame)
                     TeleportTo(target_pos);
                 }
             }
@@ -148,13 +176,10 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
             float jumppower = memory->read<float>(humanoid + offsets::JumpPower);
             ImGui::Text("JumpPower: %.1f", jumppower);
 
-            // Humanoid State
             uintptr_t humanoid_state_ptr = memory->read<uintptr_t>(humanoid + offsets::HumanoidState);
             if (humanoid_state_ptr)
             {
                 uintptr_t humanoid_state_id = memory->read<uintptr_t>(humanoid_state_ptr + offsets::HumanoidStateId);
-                // This ID needs to be mapped to a readable string, which is game-specific.
-                // For now, just display the ID.
                 ImGui::Text("Humanoid State ID: %llu", humanoid_state_id);
             }
         }
@@ -201,3 +226,4 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
         ImGui::Text("Backpack not found.");
     }
 }
+    
