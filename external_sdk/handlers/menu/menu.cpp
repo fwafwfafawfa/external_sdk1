@@ -174,7 +174,7 @@ void c_menu::run_main_window()
             ImGui::Checkbox("Show Health", &vars::esp::show_health);
             ImGui::Checkbox("Show Distance", &vars::esp::show_distance);
             ImGui::Checkbox("Show Weapon", &vars::esp::show_weapon);
-            ImGui::Checkbox("Show FPS", &vars::esp::show_fps);
+            ImGui::Checkbox("Show FPS (broken)", &vars::esp::show_fps);
             ImGui::Checkbox("Hide Teammates", &vars::esp::hide_teammates);
             ImGui::Checkbox("Hide Dead", &vars::esp::hide_dead);
 
