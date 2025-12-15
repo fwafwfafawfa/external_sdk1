@@ -40,6 +40,8 @@ void c_feature_handler::start(uintptr_t datamodel)
 
     esp.run_aimbot(viewmatrix);
 
+    esp.draw_hitbox_esp(viewmatrix);
+
     speed_hack::run();
 
 

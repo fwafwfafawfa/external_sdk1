@@ -850,6 +850,95 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
     }
 }
 
+void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
+{
+    if (!vars::combat::hitbox_expander || !vars::combat::hitbox_visible)
+        return;
+
+    if (!g_main::datamodel || !g_main::localplayer)
+        return;
+
+    std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
+
+    for (uintptr_t player : players)
+    {
+        if (!player || player == g_main::localplayer)
+            continue;
+
+        if (vars::combat::hitbox_skip_teammates)
+        {
+            uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+            if (player_team != 0 && player_team == g_main::localplayer_team)
+                continue;
+        }
+
+        uintptr_t character = core.get_model_instance(player);
+        if (!character) continue;
+
+        uintptr_t hrp = core.find_first_child(character, "HumanoidRootPart");
+        if (!hrp) continue;
+
+        uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+        if (!primitive) continue;
+
+        // Get HRP position
+        vector hrp_pos = memory->read<vector>(primitive + offsets::Position);
+
+        // Get hitbox size
+        float size_x = vars::combat::hitbox_size_x;
+        float size_y = vars::combat::hitbox_size_y;
+        float size_z = vars::combat::hitbox_size_z;
+
+        // Calculate 8 corners of the hitbox
+        vector corners[8] = {
+            { hrp_pos.x - size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x - size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x - size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z + size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z + size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z + size_z / 2 },
+            { hrp_pos.x - size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z + size_z / 2 }
+        };
+
+        // Convert to screen coordinates
+        vector2d screen_corners[8];
+        bool all_visible = true;
+
+        for (int i = 0; i < 8; i++)
+        {
+            if (!core.world_to_screen(corners[i], screen_corners[i], viewmatrix))
+            {
+                all_visible = false;
+                break;
+            }
+        }
+
+        if (!all_visible) continue;
+
+        ImColor hitbox_color = ImColor(255, 0, 0, 150);  // Red, semi-transparent
+
+        // Draw 12 edges of the box
+        // Bottom face
+        draw.line(ImVec2(screen_corners[0].x, screen_corners[0].y), ImVec2(screen_corners[1].x, screen_corners[1].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[1].x, screen_corners[1].y), ImVec2(screen_corners[2].x, screen_corners[2].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[2].x, screen_corners[2].y), ImVec2(screen_corners[3].x, screen_corners[3].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[3].x, screen_corners[3].y), ImVec2(screen_corners[0].x, screen_corners[0].y), hitbox_color, 1.0f);
+
+        // Top face
+        draw.line(ImVec2(screen_corners[4].x, screen_corners[4].y), ImVec2(screen_corners[5].x, screen_corners[5].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[5].x, screen_corners[5].y), ImVec2(screen_corners[6].x, screen_corners[6].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[6].x, screen_corners[6].y), ImVec2(screen_corners[7].x, screen_corners[7].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[7].x, screen_corners[7].y), ImVec2(screen_corners[4].x, screen_corners[4].y), hitbox_color, 1.0f);
+
+        // Vertical edges
+        draw.line(ImVec2(screen_corners[0].x, screen_corners[0].y), ImVec2(screen_corners[4].x, screen_corners[4].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[1].x, screen_corners[1].y), ImVec2(screen_corners[5].x, screen_corners[5].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[2].x, screen_corners[2].y), ImVec2(screen_corners[6].x, screen_corners[6].y), hitbox_color, 1.0f);
+        draw.line(ImVec2(screen_corners[3].x, screen_corners[3].y), ImVec2(screen_corners[7].x, screen_corners[7].y), hitbox_color, 1.0f);
+    }
+}
+
 void c_esp::start_hitbox_thread() {
     if (!c_esp::hitbox_thread_running) {
         std::thread(c_esp::hitbox_expander_thread).detach();
@@ -907,12 +996,24 @@ void c_esp::hitbox_expander_thread()
                 uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
                 if (!is_valid_pointer(primitive)) continue;
 
+                // 1. Resize the hitbox
                 vector newSize = {
                     vars::combat::hitbox_size_x,
                     vars::combat::hitbox_size_y,
                     vars::combat::hitbox_size_z
                 };
                 memory->write<vector>(primitive + offsets::PartSize, newSize);
+
+                // 2. Make it visible (transparency = 0 is fully visible)
+                if (vars::combat::hitbox_visible)
+                {
+                    memory->write<float>(primitive + offsets::Transparency, 0.0f);  // Semi-transparent
+
+                    // Force redraw by toggling CanCollide
+                    uint8_t canCollide = memory->read<uint8_t>(hrp + offsets::CanCollide);
+                    memory->write<uint8_t>(hrp + offsets::CanCollide, !canCollide);
+                    memory->write<uint8_t>(hrp + offsets::CanCollide, canCollide);
+                }
 
                 c_esp::hitbox_processed_count++;
             }
