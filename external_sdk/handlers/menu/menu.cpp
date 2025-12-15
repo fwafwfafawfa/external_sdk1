@@ -354,6 +354,31 @@ void c_menu::run_main_window()
             ImGui::EndTabItem();
         }
 
+        if (ImGui::BeginTabItem("Hitbox"))
+        {
+            ImGui::Checkbox("Hitbox Expander", &vars::combat::hitbox_expander);
+
+            if (vars::combat::hitbox_expander)
+            {
+                ImGui::SliderFloat("Size X", &vars::combat::hitbox_size_x, 1.0f, 20.0f);
+                ImGui::SliderFloat("Size Y", &vars::combat::hitbox_size_y, 1.0f, 20.0f);
+                ImGui::SliderFloat("Size Z", &vars::combat::hitbox_size_z, 1.0f, 20.0f);
+                ImGui::Checkbox("Can Collide", &vars::combat::hitbox_can_collide);
+                ImGui::Checkbox("Skip Teammates", &vars::combat::hitbox_skip_teammates);
+
+                ImGui::Text("Players: %d", c_esp::hitbox_processed_count);
+
+                static bool thread_started = false;
+                if (!thread_started)
+                {
+                    c_esp::start_hitbox_thread();
+                    thread_started = true;
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
         if (ImGui::BeginTabItem("Theme"))
         {
             ImGui::Text("Theme Editor");

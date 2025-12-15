@@ -38,6 +38,11 @@ public:
     static std::mutex vis_cache_mtx;
     static std::unordered_map<uintptr_t, TargetData> target_tracking;
     static std::mutex tracking_mtx;
+    static void hitbox_expander_thread();
+    static void start_hitbox_thread();
+    static int hitbox_processed_count;  // PUBLIC
+    static void apply_hitbox_expander();
+    static std::mutex players_mtx;
 
     void update_world_cache();
     void calculate_fps();
@@ -46,6 +51,9 @@ public:
     void draw_minimap(view_matrix_t viewmatrix);
     bool is_visible(const vector& from, const vector& to, uintptr_t target_model);
     bool is_visible(const vector& from, const vector& head, const vector& torso, const vector& pelvis, const vector& left_foot, const vector& right_foot, uintptr_t target_model);
+
+private:
+    static std::atomic<bool> hitbox_thread_running;
 
 };
 

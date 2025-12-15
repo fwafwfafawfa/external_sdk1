@@ -1,5 +1,6 @@
 #pragma once
 #include "../../main.hpp"
+#include "game/features/example_esp/esp.hpp"
 
 class c_menu
 {

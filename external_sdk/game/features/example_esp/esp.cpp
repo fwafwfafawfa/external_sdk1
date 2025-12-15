@@ -21,6 +21,13 @@ std::atomic<bool> c_esp::ready{ false };
 std::unordered_map<uintptr_t, std::pair<bool, std::chrono::steady_clock::time_point>> c_esp::vis_cache;
 std::mutex c_esp::geometry_mtx;
 std::mutex c_esp::vis_cache_mtx;
+std::unordered_map<uintptr_t, TargetData> c_esp::target_tracking;
+std::mutex c_esp::tracking_mtx;
+std::mutex c_esp::players_mtx;
+
+
+std::atomic<bool> c_esp::hitbox_thread_running{ false };
+int c_esp::hitbox_processed_count = 0;
 
 
 static inline vector normalize_vec(const vector& v)
@@ -80,9 +87,6 @@ static int frame_count = 0;
 static float fps = 0.0f;
 static std::chrono::steady_clock::time_point trigger_fire_time = {};
 static bool trigger_waiting = false;
-
-std::unordered_map<uintptr_t, TargetData> c_esp::target_tracking;
-std::mutex c_esp::tracking_mtx;
 
 void c_esp::calculate_fps()
 {
@@ -524,6 +528,12 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         last_cache_update = now_time;
     }
 
+    std::vector<uintptr_t> players;
+    {
+        std::lock_guard<std::mutex> lock(c_esp::players_mtx);
+        players = core.get_players(g_main::datamodel);
+    }
+
     vector2d crosshair_pos = {
         static_cast<float>(core.get_screen_width() / 2),
         static_cast<float>(core.get_screen_height() / 2)
@@ -553,8 +563,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
     vector cam_pos = {};
     if (camera)
         cam_pos = memory->read<vector>(camera + offsets::CameraPos);
-
-    std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
 
     uintptr_t current_target = 0;
 
@@ -839,5 +847,80 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         this->smoothed_delta_x = 0.0f;
         this->smoothed_delta_y = 0.0f;
         trigger_waiting = false;
+    }
+}
+
+void c_esp::start_hitbox_thread() {
+    if (!c_esp::hitbox_thread_running) {
+        std::thread(c_esp::hitbox_expander_thread).detach();
+        c_esp::hitbox_thread_running = true;
+    }
+}
+
+void c_esp::hitbox_expander_thread()
+{
+    while (true)
+    {
+        if (!vars::combat::hitbox_expander)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            continue;
+        }
+
+        if (!g_main::datamodel || !g_main::localplayer)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            continue;
+        }
+
+        std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
+        c_esp::hitbox_processed_count = 0;
+
+        for (uintptr_t player : players)
+        {
+            if (!player || player == g_main::localplayer) continue;
+
+            uintptr_t character = core.get_model_instance(player);
+            if (!character) continue;
+
+            uintptr_t hrp = core.find_first_child(character, "HumanoidRootPart");
+            if (!hrp) continue;
+
+            uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+            if (!primitive || primitive < 0x100000) continue;
+
+            // Read BEFORE
+            vector size_before = memory->read<vector>(primitive + offsets::PartSize);
+            util.m_print("BEFORE: %.2f, %.2f, %.2f", size_before.x, size_before.y, size_before.z);
+
+            // Write new size
+            vector new_size = { 10.0f, 10.0f, 10.0f };
+            memory->write<vector>(primitive + offsets::PartSize, new_size);
+
+            // Read AFTER
+            vector size_after = memory->read<vector>(primitive + offsets::PartSize);
+            util.m_print("AFTER: %.2f, %.2f, %.2f", size_after.x, size_after.y, size_after.z);
+
+            // Did it change?
+            if (size_after.x == new_size.x && size_after.y == new_size.y && size_after.z == new_size.z)
+            {
+                util.m_print("SUCCESS - Size changed!");
+            }
+            else if (size_after.x == size_before.x)
+            {
+                util.m_print("FAILED - Size did NOT change!");
+            }
+            else
+            {
+                util.m_print("PARTIAL - Something weird happened");
+            }
+
+            c_esp::hitbox_processed_count++;
+
+            // Only do one player for testing
+            break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 }

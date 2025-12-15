@@ -63,6 +63,15 @@ namespace vars
         inline bool prediction = false; // New: Toggle for aimbot prediction
     }
 
+    namespace combat {
+        inline bool hitbox_expander = false;
+        inline float hitbox_size_x = 8.0f;
+        inline float hitbox_size_y = 8.0f;
+        inline float hitbox_size_z = 8.0f;
+        inline bool hitbox_can_collide = false;
+        inline bool hitbox_skip_teammates = true;
+    }
+
     namespace speed_hack
     {
         inline bool toggled = false;
