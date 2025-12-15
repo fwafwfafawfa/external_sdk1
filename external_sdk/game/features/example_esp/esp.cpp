@@ -857,6 +857,14 @@ void c_esp::start_hitbox_thread() {
     }
 }
 
+static bool is_valid_pointer(uintptr_t ptr)
+{
+    if (!ptr) return false;
+    if (ptr < 0x10000) return false;
+    if (ptr > 0x7FFFFFFFFFFF) return false;
+    return true;
+}
+
 void c_esp::hitbox_expander_thread()
 {
     while (true)
@@ -873,54 +881,47 @@ void c_esp::hitbox_expander_thread()
             continue;
         }
 
-        std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
-        c_esp::hitbox_processed_count = 0;
-
-        for (uintptr_t player : players)
+        try
         {
-            if (!player || player == g_main::localplayer) continue;
+            std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
+            c_esp::hitbox_processed_count = 0;
 
-            uintptr_t character = core.get_model_instance(player);
-            if (!character) continue;
-
-            uintptr_t hrp = core.find_first_child(character, "HumanoidRootPart");
-            if (!hrp) continue;
-
-            uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
-            if (!primitive || primitive < 0x100000) continue;
-
-            // Read BEFORE
-            vector size_before = memory->read<vector>(primitive + offsets::PartSize);
-            util.m_print("BEFORE: %.2f, %.2f, %.2f", size_before.x, size_before.y, size_before.z);
-
-            // Write new size
-            vector new_size = { 10.0f, 10.0f, 10.0f };
-            memory->write<vector>(primitive + offsets::PartSize, new_size);
-
-            // Read AFTER
-            vector size_after = memory->read<vector>(primitive + offsets::PartSize);
-            util.m_print("AFTER: %.2f, %.2f, %.2f", size_after.x, size_after.y, size_after.z);
-
-            // Did it change?
-            if (size_after.x == new_size.x && size_after.y == new_size.y && size_after.z == new_size.z)
+            for (uintptr_t player : players)
             {
-                util.m_print("SUCCESS - Size changed!");
-            }
-            else if (size_after.x == size_before.x)
-            {
-                util.m_print("FAILED - Size did NOT change!");
-            }
-            else
-            {
-                util.m_print("PARTIAL - Something weird happened");
-            }
+                if (!is_valid_pointer(player)) continue;
+                if (player == g_main::localplayer) continue;
 
-            c_esp::hitbox_processed_count++;
+                if (vars::combat::hitbox_skip_teammates)
+                {
+                    uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+                    if (player_team != 0 && player_team == g_main::localplayer_team)
+                        continue;
+                }
 
-            // Only do one player for testing
-            break;
+                uintptr_t character = core.get_model_instance(player);
+                if (!is_valid_pointer(character)) continue;
+
+                uintptr_t hrp = core.find_first_child(character, "HumanoidRootPart");
+                if (!is_valid_pointer(hrp)) continue;
+
+                uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+                if (!is_valid_pointer(primitive)) continue;
+
+                vector newSize = {
+                    vars::combat::hitbox_size_x,
+                    vars::combat::hitbox_size_y,
+                    vars::combat::hitbox_size_z
+                };
+                memory->write<vector>(primitive + offsets::PartSize, newSize);
+
+                c_esp::hitbox_processed_count++;
+            }
+        }
+        catch (...)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }

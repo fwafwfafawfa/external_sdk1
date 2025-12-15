@@ -68,6 +68,8 @@ namespace vars
         inline float hitbox_size_x = 8.0f;
         inline float hitbox_size_y = 8.0f;
         inline float hitbox_size_z = 8.0f;
+        inline float hitbox_multiplier = 2.0f;
+        inline bool hitbox_visible = false;
         inline bool hitbox_can_collide = false;
         inline bool hitbox_skip_teammates = true;
     }

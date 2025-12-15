@@ -363,6 +363,8 @@ void c_menu::run_main_window()
                 ImGui::SliderFloat("Size X", &vars::combat::hitbox_size_x, 1.0f, 20.0f);
                 ImGui::SliderFloat("Size Y", &vars::combat::hitbox_size_y, 1.0f, 20.0f);
                 ImGui::SliderFloat("Size Z", &vars::combat::hitbox_size_z, 1.0f, 20.0f);
+                ImGui::SliderFloat("Size Multiplier", &vars::combat::hitbox_multiplier, 1.5f, 5.0f);
+                ImGui::Checkbox("Show Hitbox", &vars::combat::hitbox_visible);
                 ImGui::Checkbox("Can Collide", &vars::combat::hitbox_can_collide);
                 ImGui::Checkbox("Skip Teammates", &vars::combat::hitbox_skip_teammates);
 
