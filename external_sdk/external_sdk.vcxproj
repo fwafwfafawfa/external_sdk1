@@ -211,6 +211,7 @@
     <ClInclude Include="handlers\themes\theme.hpp" />
     <ClInclude Include="main.hpp" />
     <ClInclude Include="math.hpp" />
+    <ClInclude Include="Tphandler.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

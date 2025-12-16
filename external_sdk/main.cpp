@@ -1,5 +1,6 @@
 #include "main.hpp"
 #include "handlers/themes/theme.hpp"
+#include "tphandler.hpp" // Add this include
 
 void reinitialize_game_pointers()
 {
@@ -29,7 +30,7 @@ void reinitialize_game_pointers()
 
             util.m_print("reinitialize_game_pointers: Success on attempt %d", attempt);
             util.m_print("Base: 0x%llX FakeDataModel: 0x%llX Datamodel: 0x%llX VisualEngine: 0x%llX Players: 0x%llX LocalPlayer: 0x%llX Team: 0x%llX",
-                         base_address, fake_datamodel_pointer, datamodel, v_engine, players_instance, localplayer, localplayer_team);
+                base_address, fake_datamodel_pointer, datamodel, v_engine, players_instance, localplayer, localplayer_team);
             auto place_id = memory->read<uintptr_t>(g_main::datamodel + offsets::PlaceId);
             util.m_print("reinitialize_game_pointers: Place ID: %llu", place_id);
             return;
@@ -42,20 +43,21 @@ void reinitialize_game_pointers()
     util.m_print("reinitialize_game_pointers: Failed after %d attempts.", max_attempts);
 }
 
-int main( )
+int main()
 {
-    memory = new c_memory( "RobloxPlayerBeta.exe" );
+    memory = new c_memory("RobloxPlayerBeta.exe");
 
-    if ( !memory )
+    if (!memory)
     {
-        util.m_print( "Failed to find Roblox, run the game." );
-        std::cin.get( );
+        util.m_print("Failed to find Roblox, run the game.");
+        std::cin.get();
         return 0;
     }
 
-    // reinitialize_game_pointers(); // This is now handled by the rescan thread in the main loop
+    config.load("settings.ini");
 
-    config.load("settings.ini"); // Load settings on startup
+    // Start the TP handler (monitors game state and reinitializes when needed)
+    tp_handler.start();
 
-    overlay.start( );
+    overlay.start();
 }

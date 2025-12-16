@@ -891,14 +891,14 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
 
         // Calculate 8 corners of the hitbox
         vector corners[8] = {
-            { hrp_pos.x - size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
-            { hrp_pos.x + size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
-            { hrp_pos.x + size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z - size_z / 2 },
-            { hrp_pos.x - size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z - size_z / 2 },
-            { hrp_pos.x - size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z + size_z / 2 },
-            { hrp_pos.x + size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z + size_z / 2 },
-            { hrp_pos.x + size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z + size_z / 2 },
-            { hrp_pos.x - size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z + size_z / 2 }
+            { hrp_pos.x - size_x/2, hrp_pos.y - size_y/2, hrp_pos.z - size_z/2 },
+            { hrp_pos.x + size_x/2, hrp_pos.y - size_y/2, hrp_pos.z - size_z/2 },
+            { hrp_pos.x + size_x/2, hrp_pos.y + size_y/2, hrp_pos.z - size_z/2 },
+            { hrp_pos.x - size_x/2, hrp_pos.y + size_y/2, hrp_pos.z - size_z/2 },
+            { hrp_pos.x - size_x/2, hrp_pos.y - size_y/2, hrp_pos.z + size_z/2 },
+            { hrp_pos.x + size_x/2, hrp_pos.y - size_y/2, hrp_pos.z + size_z/2 },
+            { hrp_pos.x + size_x/2, hrp_pos.y + size_y/2, hrp_pos.z + size_z/2 },
+            { hrp_pos.x - size_x/2, hrp_pos.y + size_y/2, hrp_pos.z + size_z/2 }
         };
 
         // Convert to screen coordinates
@@ -958,13 +958,21 @@ void c_esp::hitbox_expander_thread()
 {
     while (true)
     {
+        // Check if enabled
         if (!vars::combat::hitbox_expander)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             continue;
         }
 
-        if (!g_main::datamodel || !g_main::localplayer)
+        // Validate globals
+        if (!is_valid_pointer(g_main::datamodel))
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            continue;
+        }
+
+        if (!is_valid_pointer(g_main::localplayer))
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             continue;
@@ -972,57 +980,137 @@ void c_esp::hitbox_expander_thread()
 
         try
         {
-            std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
+            // Get players safely
+            std::vector<uintptr_t> players;
+
+            try
+            {
+                players = core.get_players(g_main::datamodel);
+            }
+            catch (...)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                continue;
+            }
+
+            if (players.empty())
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+
             c_esp::hitbox_processed_count = 0;
+
+            // Pre-calculate size
+            vector newSize = {
+                vars::combat::hitbox_size_x,
+                vars::combat::hitbox_size_y,
+                vars::combat::hitbox_size_z
+            };
+
+            // Validate size values
+            if (newSize.x <= 0.0f || newSize.x > 1000.0f) continue;
+            if (newSize.y <= 0.0f || newSize.y > 1000.0f) continue;
+            if (newSize.z <= 0.0f || newSize.z > 1000.0f) continue;
 
             for (uintptr_t player : players)
             {
+                // Validate player pointer
                 if (!is_valid_pointer(player)) continue;
                 if (player == g_main::localplayer) continue;
 
+                // Skip teammates
                 if (vars::combat::hitbox_skip_teammates)
                 {
-                    uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
-                    if (player_team != 0 && player_team == g_main::localplayer_team)
+                    try
+                    {
+                        uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+                        if (player_team != 0 && player_team == g_main::localplayer_team)
+                            continue;
+                    }
+                    catch (...)
+                    {
                         continue;
+                    }
                 }
 
-                uintptr_t character = core.get_model_instance(player);
+                // Get character
+                uintptr_t character = 0;
+                try
+                {
+                    character = core.get_model_instance(player);
+                }
+                catch (...)
+                {
+                    continue;
+                }
+
                 if (!is_valid_pointer(character)) continue;
 
-                uintptr_t hrp = core.find_first_child(character, "HumanoidRootPart");
-                if (!is_valid_pointer(hrp)) continue;
-
-                uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
-                if (!is_valid_pointer(primitive)) continue;
-
-                // 1. Resize the hitbox
-                vector newSize = {
-                    vars::combat::hitbox_size_x,
-                    vars::combat::hitbox_size_y,
-                    vars::combat::hitbox_size_z
-                };
-                memory->write<vector>(primitive + offsets::PartSize, newSize);
-
-                // 2. Make it visible (transparency = 0 is fully visible)
-                if (vars::combat::hitbox_visible)
+                // Get HumanoidRootPart
+                uintptr_t hrp = 0;
+                try
                 {
-                    memory->write<float>(primitive + offsets::Transparency, 0.0f);  // Semi-transparent
-
-                    // Force redraw by toggling CanCollide
-                    uint8_t canCollide = memory->read<uint8_t>(hrp + offsets::CanCollide);
-                    memory->write<uint8_t>(hrp + offsets::CanCollide, !canCollide);
-                    memory->write<uint8_t>(hrp + offsets::CanCollide, canCollide);
+                    hrp = core.find_first_child(character, "HumanoidRootPart");
+                }
+                catch (...)
+                {
+                    continue;
                 }
 
-                c_esp::hitbox_processed_count++;
+                if (!is_valid_pointer(hrp)) continue;
+
+                // Get primitive
+                uintptr_t primitive = 0;
+                try
+                {
+                    primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+                }
+                catch (...)
+                {
+                    continue;
+                }
+
+                if (!is_valid_pointer(primitive)) continue;
+
+                // Validate by reading current size first
+                try
+                {
+                    vector currentSize = memory->read<vector>(primitive + offsets::PartSize);
+
+                    // Check if current size is reasonable (not garbage memory)
+                    if (currentSize.x <= 0.0f || currentSize.x > 1000.0f) continue;
+                    if (currentSize.y <= 0.0f || currentSize.y > 1000.0f) continue;
+                    if (currentSize.z <= 0.0f || currentSize.z > 1000.0f) continue;
+                }
+                catch (...)
+                {
+                    continue;
+                }
+
+                // Write new size
+                try
+                {
+                    memory->write<vector>(primitive + offsets::PartSize, newSize);
+                    c_esp::hitbox_processed_count++;
+                }
+                catch (...)
+                {
+                    continue;
+                }
+
+                // Small delay between players to reduce stress
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
         catch (...)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            // Major error - wait longer
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            continue;
         }
 
+        // Normal delay between loops
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
