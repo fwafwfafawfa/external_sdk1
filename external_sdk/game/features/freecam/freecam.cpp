@@ -14,6 +14,69 @@ static float pitch = 0.0f;
 static bool mouse_down = false;
 static POINT locked_cursor = { 0, 0 };
 
+void c_freecam::set_fov(float fov_degrees)
+{
+    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+    if (!workspace) return;
+
+    uintptr_t camera = memory->read<uintptr_t>(workspace + offsets::Camera);
+    if (!camera) return;
+
+    const float PI = 3.14159265358979f;
+    float fov_radians = fov_degrees * (PI / 180.0f);
+
+    memory->write<float>(camera + offsets::FOV, fov_radians);
+}
+
+// 2. Unlock zoom - lets you zoom out super far
+void c_freecam::unlock_zoom()
+{
+    if (!g_main::localplayer) return;
+
+    memory->write<float>(g_main::localplayer + offsets::CameraMinZoomDistance, 0.5f);
+    memory->write<float>(g_main::localplayer + offsets::CameraMaxZoomDistance, 9999.0f);
+    memory->write<int>(g_main::localplayer + offsets::CameraMode, 0);
+}
+
+void c_freecam::unlock_camera()
+{
+    if (!g_main::localplayer) return;
+
+    memory->write<float>(g_main::localplayer + offsets::CameraMinZoomDistance, 0.5f);
+    memory->write<float>(g_main::localplayer + offsets::CameraMaxZoomDistance, 9999.0f);
+
+    std::cout << "[CAMERA] Camera unlocked" << std::endl;
+}
+
+void c_freecam::reset_camera_mode()
+{
+    if (!g_main::localplayer) return;
+
+    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+    if (!workspace) return;
+
+    uintptr_t cam = memory->read<uintptr_t>(workspace + offsets::Camera);
+    if (!cam) return;
+
+    uintptr_t character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+    if (!character) return;
+
+    uintptr_t humanoid = core.find_first_child_class(character, "Humanoid");
+    if (!humanoid) return;
+
+    // Reset camera to follow player
+    memory->write<uintptr_t>(cam + offsets::CameraSubject, humanoid);
+    memory->write<int>(cam + offsets::CameraType, 0); // Custom = 0
+
+    // Reset zoom to default
+    memory->write<float>(g_main::localplayer + offsets::CameraMinZoomDistance, 0.5f);
+    memory->write<float>(g_main::localplayer + offsets::CameraMaxZoomDistance, 400.0f);
+
+    std::cout << "[CAMERA] Camera reset to default" << std::endl;
+}
+
+// ==================== EXISTING RUN FUNCTION ====================
+
 void c_freecam::run(float dt)
 {
     if (!g_main::localplayer) return;

@@ -6,9 +6,8 @@
 #include "infinite_jump/infinite_jump.hpp"
 #include "airswim/airswim.hpp"
 
-
 #include "../../handlers/vars.hpp"
-#include "../../handlers/misc/misc.hpp" // Include misc.hpp
+#include "../../handlers/misc/misc.hpp"
 #include <chrono>
 
 void c_feature_handler::start(uintptr_t datamodel)
@@ -18,11 +17,10 @@ void c_feature_handler::start(uintptr_t datamodel)
     std::chrono::duration<float> dt = now - last_time;
     last_time = now;
 
-    // Re-initialize game pointers if they become invalid
     if (!g_main::datamodel || !g_main::localplayer) {
         reinitialize_game_pointers();
-        if (!g_main::datamodel || !g_main::localplayer) { // Check again after re-init
-            return; // Still invalid, cannot proceed
+        if (!g_main::datamodel || !g_main::localplayer) {
+            return;
         }
     }
 
@@ -33,19 +31,15 @@ void c_feature_handler::start(uintptr_t datamodel)
     if (!roblox_window || GetForegroundWindow() != roblox_window)
         return;
 
-    view_matrix_t viewmatrix = memory->read< view_matrix_t >(g_main::v_engine + offsets::viewmatrix);
+    view_matrix_t viewmatrix = memory->read<view_matrix_t>(g_main::v_engine + offsets::viewmatrix);
 
     if (vars::esp::toggled)
         esp.run_players(viewmatrix);
 
     esp.run_aimbot(viewmatrix);
-
     esp.draw_hitbox_esp(viewmatrix);
 
     speed_hack::run();
-
-
-
 
     freecam.enabled = vars::freecam::toggled;
     {
@@ -60,6 +54,13 @@ void c_feature_handler::start(uintptr_t datamodel)
         fly.run();
     }
 
+    if (vars::set_fov::unlock_zoom) {
+        freecam.unlock_zoom();
+    }
 
-    misc.run_anti_afk(); // Call anti-AFK function
+    if (vars::set_fov::toggled) {
+        freecam.set_fov(vars::set_fov::set_fov);
+    }
+
+    misc.run_anti_afk();
 }

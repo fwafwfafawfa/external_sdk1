@@ -197,6 +197,7 @@ void c_menu::run_main_window()
             ImGui::SliderFloat("Aimbot Smoothing", &vars::aimbot::smoothing_factor, 0.0f, 1.0f);
             ImGui::Checkbox("Show FOV Circle", &vars::aimbot::show_fov_circle);
             ImGui::Checkbox("Prediction", &vars::aimbot::prediction);
+            ImGui::Checkbox("Ignore Teammates (use in games where you're solo against all)", &vars::aimbot::ignore_teammates);
 
             const char* hitboxes[] = { "Head", "Body" };
             ImGui::Combo("Hitbox", &vars::aimbot::aimbot_hitbox, hitboxes, IM_ARRAYSIZE(hitboxes));
@@ -227,7 +228,7 @@ void c_menu::run_main_window()
         if (ImGui::BeginTabItem("Triggerbot"))
         {
             ImGui::Checkbox("Enable Triggerbot", &vars::triggerbot::toggled);
-
+            ImGui::Checkbox("Ignore Teammates", &vars::triggerbot::ignore_teammates);
             ImGui::SliderFloat("Triggerbot FOV", &vars::triggerbot::fov, 1.0f, 50.0f);
             ImGui::SliderInt("Delay (ms)", &vars::triggerbot::delay, 0, 500);
             ImGui::SliderInt("Hold Time (ms)", &vars::triggerbot::hold_time, 10, 200);
@@ -297,6 +298,10 @@ void c_menu::run_main_window()
             ImGui::Checkbox("Freecam", &vars::freecam::toggled);
             ImGui::SliderFloat("Freecam Speed", &vars::freecam::speed, 0.1f, 10.0f);
             ImGui::Checkbox("Noclip", &vars::noclip::toggled);
+            ImGui::Checkbox("FOV", &vars::set_fov::toggled);
+            ImGui::Checkbox("FOV Changer", &vars::set_fov::toggled);
+            ImGui::SliderFloat("FOV Value", &vars::set_fov::set_fov, 30.0f, 120.0f);
+            ImGui::Checkbox("Unlock Zoom", &vars::set_fov::unlock_zoom);
             ImGui::Checkbox("Fly", &vars::fly::toggled);
             ImGui::SliderFloat("Fly Speed", &vars::fly::speed, 0.1f, 2.0f);
 

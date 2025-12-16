@@ -566,6 +566,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
     uintptr_t current_target = 0;
 
+    // ========== LOCKED TARGET VALIDATION ==========
     if (this->locked_target != 0 && aimbot_active)
     {
         bool locked_target_still_valid = false;
@@ -573,11 +574,17 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         {
             if (player == this->locked_target)
             {
-                uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
-                if (player_team == g_main::localplayer_team && player_team != 0)
+                // FIXED: Only check team if ignore_teammates is enabled
+                bool should_ignore_team = (aimbot_active && vars::aimbot::ignore_teammates) ||
+                    (triggerbot_active && vars::triggerbot::ignore_teammates);
+                if (should_ignore_team)
                 {
-                    this->locked_target = 0;
-                    break;
+                    uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+                    if (player_team == g_main::localplayer_team && player_team != 0)
+                    {
+                        this->locked_target = 0;
+                        break;
+                    }
                 }
 
                 auto model = core.get_model_instance(player);
@@ -602,7 +609,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                                     if (!p_player_root) break;
                                     vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
                                     vector v_player_root = memory->read<vector>(p_player_root + offsets::Velocity);
-                                
+
                                     vector2d s_target_bone_pos;
                                     if (core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
                                     {
@@ -624,11 +631,12 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                 break;
             }
         }
- 
+
         if (!locked_target_still_valid)
             this->locked_target = 0;
     }
 
+    // ========== FIND NEW TARGET ==========
     if (this->locked_target == 0)
     {
         uintptr_t new_closest_player = 0;
@@ -640,9 +648,15 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             if (!player || player == g_main::localplayer)
                 continue;
 
-            uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
-            if (player_team == g_main::localplayer_team && player_team != 0)
-                continue;
+            // FIXED: Only check team if ignore_teammates is enabled
+            bool should_ignore_team = (aimbot_active && vars::aimbot::ignore_teammates) ||
+                (triggerbot_active && vars::triggerbot::ignore_teammates);
+            if (should_ignore_team)
+            {
+                uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+                if (player_team == g_main::localplayer_team && player_team != 0)
+                    continue;
+            }
 
             auto model = core.get_model_instance(player);
             if (!model)
@@ -696,6 +710,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             this->locked_target = new_closest_player;
     }
 
+    // ========== AIM AT TARGET ==========
     if (current_target)
     {
         auto model = core.get_model_instance(current_target);
@@ -710,7 +725,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
         if (vars::aimbot::prediction)
         {
-            w_target_bone_pos.x += v_player_root.x * 0.05f;  // Half the original time
+            w_target_bone_pos.x += v_player_root.x * 0.05f;
             w_target_bone_pos.y += v_player_root.y * 0.05f;
             w_target_bone_pos.z += v_player_root.z * 0.05f;
         }
@@ -721,6 +736,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             float delta_x = s_target_bone_pos.x - crosshair_pos.x;
             float delta_y = s_target_bone_pos.y - crosshair_pos.y;
 
+            // ========== TRIGGERBOT ==========
             if (triggerbot_active)
             {
                 float distance = sqrtf(delta_x * delta_x + delta_y * delta_y);
@@ -783,6 +799,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                 }
             }
 
+            // ========== AIMBOT MOVEMENT ==========
             if (aimbot_active)
             {
                 this->smoothed_delta_x = (delta_x * vars::aimbot::smoothing_factor) + (this->smoothed_delta_x * (1.0f - vars::aimbot::smoothing_factor));

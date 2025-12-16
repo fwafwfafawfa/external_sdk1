@@ -44,6 +44,7 @@ namespace vars
     {
         inline bool toggled = false;
         inline int activation_key = VK_XBUTTON1;
+        inline bool ignore_teammates = true;
         inline float fov = 15.0f;
         inline int delay = 50;
         inline int hold_time = 50;
@@ -58,7 +59,8 @@ namespace vars
         inline bool use_set_cursor_pos = false;
         inline float smoothing_factor = 0.2f;
         inline int activation_key = 0x02;
-        inline int aimbot_hitbox = 0; // 0 = Head, 1 = Body (HumanoidRootPart)
+        inline int aimbot_hitbox = 0; // 0 = Head, 1 = Body ()
+        inline bool ignore_teammates = true;
         inline bool show_fov_circle = true; // New: Toggle for FOV circle
         inline bool prediction = false; // New: Toggle for aimbot prediction
     }
@@ -85,6 +87,13 @@ namespace vars
         inline bool toggled = false;
         inline float speed = 2.0f;
         inline float sensitivity = 0.002f;
+    }
+
+    namespace set_fov 
+    {
+        inline float set_fov = 70.0f;
+        inline bool toggled = false;
+        inline bool unlock_zoom = false;
     }
 
     namespace noclip
