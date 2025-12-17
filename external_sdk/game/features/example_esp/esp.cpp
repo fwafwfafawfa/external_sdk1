@@ -120,7 +120,7 @@ void c_esp::update_world_cache()
                 auto m = core.get_model_instance(p);
                 if (m) player_models.push_back(m);
             }
-   
+
             std::function<void(uintptr_t)> scan_children = [&](uintptr_t parent)
                 {
                     auto children = core.children(parent);
@@ -197,11 +197,6 @@ void c_esp::update_world_cache()
         }).detach();
 }
 
-bool c_esp::is_visible(const vector& from, const vector& to, uintptr_t target_model)
-{
-    return is_visible(from, to, to, to, to, to, target_model);
-}
-
 bool c_esp::is_visible(
     const vector& from,
     const vector& head,
@@ -212,7 +207,9 @@ bool c_esp::is_visible(
     uintptr_t target_model
 )
 {
-    if (!ready) return true;
+    // FIX 1: If map isn't ready, return FALSE (Blocked/Not Visible)
+    // This stops shooting through walls when joining or laggy
+    if (!ready) return false;
 
     std::vector<WorldPart> local_geometry;
     {
@@ -220,8 +217,11 @@ bool c_esp::is_visible(
         local_geometry = geometry;
     }
 
-    if (local_geometry.empty()) return true;
+    // FIX 2: If no geometry found, return FALSE.
+    // Better to not shoot than to shoot through a wall and get banned.
+    if (local_geometry.empty()) return false;
 
+    // Cache check
     if (target_model != 0)
     {
         std::lock_guard<std::mutex> vlk(vis_cache_mtx);
@@ -230,7 +230,7 @@ bool c_esp::is_visible(
         {
             auto age = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - it->second.second).count();
-            if (age < 100) return it->second.first;
+            if (age < 50) return it->second.first; // Reduced cache time for accuracy
         }
     }
 
@@ -658,63 +658,67 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         float new_closest_distance = FLT_MAX;
         float search_fov = aimbot_active ? vars::aimbot::fov : vars::triggerbot::fov;
 
-        for (auto& player : players)
+        vector local_player_pos = { 0, 0, 0 };
+        uintptr_t local_character_model = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
+        if (local_character_model)
         {
-            if (!player || player == g_main::localplayer)
+            auto local_root = core.find_first_child(local_character_model, "HumanoidRootPart");
+            if (local_root)
+            {
+                auto p_local_root = memory->read<uintptr_t>(local_root + offsets::Primitive);
+                if (p_local_root) local_player_pos = memory->read<vector>(p_local_root + offsets::Position);
+            }
+        }
+
+        for (auto player : players)
+        {
+            if (!player || player == g_main::localplayer) continue;
+
+            if (vars::aimbot::sticky_aim && this->locked_target != 0 && player != this->locked_target)
                 continue;
 
-            // Team check
             if (vars::aimbot::ignore_teammates)
             {
                 uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
-                if (player_team == g_main::localplayer_team && player_team != 0)
-                    continue;
+                if (player_team == g_main::localplayer_team && player_team != 0) continue;
             }
 
             auto model = core.get_model_instance(player);
-            if (!model)
-                continue;
+            if (!model) continue;
 
             auto humanoid = core.find_first_child_class(model, "Humanoid");
-            if (!humanoid)
-                continue;
+            if (!humanoid) continue;
 
             float health = memory->read<float>(humanoid + offsets::Health);
-            if (health <= 0.0f)
-                continue;
+            if (health <= 0.0f) continue;
 
             auto player_root = core.find_first_child(model, "HumanoidRootPart");
-            if (!player_root)
-                continue;
+            if (!player_root) continue;
 
             auto p_player_root = memory->read<uintptr_t>(player_root + offsets::Primitive);
-            if (!p_player_root)
-                continue;
+            if (!p_player_root) continue;
 
-            // Get target bone based on settings
             const char* target_bone_name = get_target_bone_name(model, player);
             auto target_bone = core.find_first_child(model, target_bone_name);
-            if (!target_bone)
-                continue;
+            if (!target_bone) continue;
 
             auto p_target_bone = memory->read<uintptr_t>(target_bone + offsets::Primitive);
-            if (!p_target_bone)
-                continue;
+            if (!p_target_bone) continue;
 
             vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
-
             vector2d s_target_bone_pos;
-            if (!core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
-                continue;
+            if (!core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix)) continue;
 
-            float distance = sqrtf(
-                powf(s_target_bone_pos.x - crosshair_pos.x, 2) +
-                powf(s_target_bone_pos.y - crosshair_pos.y, 2)
-            );
+            float fov_distance = sqrtf(powf(s_target_bone_pos.x - crosshair_pos.x, 2) + powf(s_target_bone_pos.y - crosshair_pos.y, 2));
+            if (fov_distance > search_fov) continue;
 
-            if (distance < search_fov && distance < new_closest_distance)
+            float world_distance = sqrtf(powf(w_target_bone_pos.x - local_player_pos.x, 2) +
+                powf(w_target_bone_pos.y - local_player_pos.y, 2) +
+                powf(w_target_bone_pos.z - local_player_pos.z, 2));
+
+            if (world_distance < new_closest_distance)
             {
-                new_closest_distance = distance;
+                new_closest_distance = world_distance;
                 new_closest_player = player;
                 new_closest_model = model;
             }
@@ -724,11 +728,9 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         {
             current_target = new_closest_player;
             current_target_model = new_closest_model;
-            if (aimbot_active)
-                this->locked_target = new_closest_player;
+            if (aimbot_active && !this->locked_target) this->locked_target = new_closest_player;
         }
     }
-
     // ========== AIM AT TARGET ==========
     if (current_target && current_target_model)
     {
@@ -1031,6 +1033,14 @@ float c_esp::apply_easing(float t, int style)
     }
 }
 
+bool c_esp::is_visible(const vector& from, const vector& to, uintptr_t target_model)
+{
+    // Redirects to the main visibility check
+    // We pass 'to' (the target position) as the head, torso, etc.
+    // This is a simplified check for triggerbot
+    return is_visible(from, to, to, to, to, to, target_model);
+}
+
 void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta_x, float delta_y, vector cam_pos, vector w_target_bone_pos)
 {
     static bool trigger_mouse_down = false;
@@ -1039,7 +1049,6 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
 
     auto now = std::chrono::steady_clock::now();
 
-    // ========== HANDLE MOUSE RELEASE (non-blocking) ==========
     if (trigger_mouse_down)
     {
         if (now >= trigger_release_time)
@@ -1047,34 +1056,34 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
             trigger_mouse_down = false;
         }
-        return; // Don't do anything else while holding
+        return;
     }
 
-    // ========== CALCULATE DISTANCE ==========
     float distance = sqrtf(delta_x * delta_x + delta_y * delta_y);
-
-    // ========== FOV CHECK ==========
     if (distance > vars::triggerbot::fov)
     {
         trigger_waiting = false;
         return;
     }
 
-    // ========== TEAMMATE CHECK ==========
-    if (vars::triggerbot::ignore_teammates)
+    auto humanoid = core.find_first_child_class(model, "Humanoid");
+    if (!humanoid)
     {
-        uintptr_t player = 0; // We need to get player from model
-        // Model is the character, we need to check team
-        // Skip this check if we can't verify (already filtered in aimbot)
+        trigger_waiting = false;
+        return;
     }
 
-    // ========== VISIBILITY CHECK ==========
+    float health = memory->read<float>(humanoid + offsets::Health);
+    if (health <= 0.0f)
+    {
+        trigger_waiting = false;
+        return;
+    }
+
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     uintptr_t camera = core.find_first_child_class(workspace, "Camera");
-
     if (camera)
     {
-        // Get multiple body parts for better visibility check
         vector w_player_root = memory->read<vector>(p_player_root + offsets::Position);
         vector w_head = w_target_bone_pos;
         vector w_torso = w_player_root;
@@ -1082,7 +1091,6 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
         vector w_left_foot = w_player_root;
         vector w_right_foot = w_player_root;
 
-        // Try to get actual body part positions
         auto torso_part = core.find_first_child(model, "Torso");
         if (!torso_part) torso_part = core.find_first_child(model, "UpperTorso");
         if (torso_part)
@@ -1107,9 +1115,7 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
             if (p_right) w_right_foot = memory->read<vector>(p_right + offsets::Position);
         }
 
-        // Check if ANY part is visible
         bool visible = is_visible(cam_pos, w_head, w_torso, w_pelvis, w_left_foot, w_right_foot, model);
-
         if (!visible)
         {
             trigger_waiting = false;
@@ -1117,7 +1123,6 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
         }
     }
 
-    // ========== DELAY TIMER ==========
     if (!trigger_waiting)
     {
         trigger_fire_time = now + std::chrono::milliseconds(vars::triggerbot::delay);
@@ -1125,23 +1130,28 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
         return;
     }
 
-    // ========== WAIT FOR DELAY ==========
-    if (now < trigger_fire_time)
-        return;
+    if (now < trigger_fire_time) return;
 
-    // ========== HIT CHANCE CHECK ==========
     if (vars::triggerbot::hit_chance_enabled)
     {
-        int random = rand() % 100;
-        if (random > vars::triggerbot::hit_chance)
+        if ((rand() % 100) > vars::triggerbot::hit_chance)
         {
             trigger_waiting = false;
             return;
         }
     }
 
-    // ========== RATE LIMIT (prevent spam) ==========
     auto time_since_last = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_fire_time).count();
+    if (time_since_last < 50) return;
+
+    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+    trigger_mouse_down = true;
+    trigger_release_time = now + std::chrono::milliseconds(vars::triggerbot::hold_time);
+    last_fire_time = now;
+    trigger_waiting = false;
+
+    // ========== RATE LIMIT (prevent spam) ==========
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_fire_time).count() < 50) return;
     if (time_since_last < 50) // Minimum 50ms between shots
         return;
 
@@ -1202,14 +1212,14 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
 
         // Calculate 8 corners of the hitbox
         vector corners[8] = {
-            { hrp_pos.x - size_x/2, hrp_pos.y - size_y/2, hrp_pos.z - size_z/2 },
-            { hrp_pos.x + size_x/2, hrp_pos.y - size_y/2, hrp_pos.z - size_z/2 },
-            { hrp_pos.x + size_x/2, hrp_pos.y + size_y/2, hrp_pos.z - size_z/2 },
-            { hrp_pos.x - size_x/2, hrp_pos.y + size_y/2, hrp_pos.z - size_z/2 },
-            { hrp_pos.x - size_x/2, hrp_pos.y - size_y/2, hrp_pos.z + size_z/2 },
-            { hrp_pos.x + size_x/2, hrp_pos.y - size_y/2, hrp_pos.z + size_z/2 },
-            { hrp_pos.x + size_x/2, hrp_pos.y + size_y/2, hrp_pos.z + size_z/2 },
-            { hrp_pos.x - size_x/2, hrp_pos.y + size_y/2, hrp_pos.z + size_z/2 }
+            { hrp_pos.x - size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x - size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z - size_z / 2 },
+            { hrp_pos.x - size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z + size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z + size_z / 2 },
+            { hrp_pos.x + size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z + size_z / 2 },
+            { hrp_pos.x - size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z + size_z / 2 }
         };
 
         // Convert to screen coordinates

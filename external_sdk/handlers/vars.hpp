@@ -71,6 +71,7 @@ namespace vars
         inline float prediction_y = 15.0f;  // Usually want less Y prediction
         inline bool prediction_ignore_y = true;
         inline bool sticky_aim = false;
+        inline int target_selection = 0;
 
         // Air Part (different hitbox when target is jumping)
         inline bool air_part_enabled = false;

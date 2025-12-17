@@ -109,6 +109,22 @@ void c_config::save(const std::string& filename)
         file << "aimbot_activation_key=" << vars::aimbot::activation_key << std::endl;
         file << "aimbot_show_fov_circle=" << (vars::aimbot::show_fov_circle ? "true" : "false") << std::endl;
         file << "aimbot_prediction=" << (vars::aimbot::prediction ? "true" : "false") << std::endl;
+        file << "aimbot_hitbox=" << vars::aimbot::aimbot_hitbox << std::endl;
+        file << "aimbot_ignore_teammates=" << (vars::aimbot::ignore_teammates ? "true" : "false") << std::endl;
+        file << "aimbot_prediction_x=" << vars::aimbot::prediction_x << std::endl;
+        file << "aimbot_prediction_y=" << vars::aimbot::prediction_y << std::endl;
+        file << "aimbot_prediction_ignore_y=" << (vars::aimbot::prediction_ignore_y ? "true" : "false") << std::endl;
+        file << "aimbot_sticky_aim=" << (vars::aimbot::sticky_aim ? "true" : "false") << std::endl;
+        file << "aimbot_air_part_enabled=" << (vars::aimbot::air_part_enabled ? "true" : "false") << std::endl;
+        file << "aimbot_air_part_hitbox=" << vars::aimbot::air_part_hitbox << std::endl;
+        file << "aimbot_anti_flick=" << (vars::aimbot::anti_flick ? "true" : "false") << std::endl;
+        file << "aimbot_anti_flick_distance=" << vars::aimbot::anti_flick_distance << std::endl;
+        file << "aimbot_smoothing_style=" << vars::aimbot::smoothing_style << std::endl;
+        file << "aimbot_shake=" << (vars::aimbot::shake ? "true" : "false") << std::endl;
+        file << "aimbot_shake_x=" << vars::aimbot::shake_x << std::endl;
+        file << "aimbot_shake_y=" << vars::aimbot::shake_y << std::endl;
+        file << "aimbot_unlock_on_death=" << (vars::aimbot::unlock_on_death ? "true" : "false") << std::endl;
+
 
         // Triggerbot
         file << "[triggerbot]" << std::endl;
@@ -153,6 +169,24 @@ void c_config::save(const std::string& filename)
         file << "lag_switch_lag_interval=" << vars::lag_switch::lag_interval << std::endl;
         file << "lag_switch_auto_lag=" << (vars::lag_switch::auto_lag ? "true" : "false") << std::endl;
         file << "lag_switch_manual_lag=" << (vars::lag_switch::manual_lag ? "true" : "false") << std::endl;
+
+		// Set FOV
+        file << "[set_fov]" << std::endl;
+        file << "set_fov=" << vars::set_fov::set_fov << std::endl;
+        file << "toggled=" << (vars::set_fov::toggled ? "true" : "false") << std::endl;
+        file << "unlock_zoom=" << (vars::set_fov::unlock_zoom ? "true" : "false") << std::endl;
+
+        // Expander
+        file << "[combat]" << std::endl;
+        file << "hitbox_expander=" << (vars::combat::hitbox_expander ? "true" : "false") << std::endl;
+        file << "hitbox_size_x=" << vars::combat::hitbox_size_x << std::endl;
+        file << "hitbox_size_y=" << vars::combat::hitbox_size_y << std::endl;
+        file << "hitbox_size_z=" << vars::combat::hitbox_size_z << std::endl;
+        file << "hitbox_multiplier=" << vars::combat::hitbox_multiplier << std::endl;
+        file << "hitbox_visible=" << (vars::combat::hitbox_visible ? "true" : "false") << std::endl;
+        file << "hitbox_can_collide=" << (vars::combat::hitbox_can_collide ? "true" : "false") << std::endl;
+        file << "hitbox_skip_teammates=" << (vars::combat::hitbox_skip_teammates ? "true" : "false") << std::endl;
+
 
         file.close();
         std::cout << "Config saved to " << filename << std::endl;
@@ -220,6 +254,25 @@ void c_config::load(const std::string& filename)
         vars::aimbot::activation_key = get_value(data, "aimbot_activation_key", vars::aimbot::activation_key);
         vars::aimbot::show_fov_circle = get_value(data, "aimbot_show_fov_circle", vars::aimbot::show_fov_circle);
         vars::aimbot::prediction = get_value(data, "aimbot_prediction", vars::aimbot::prediction);
+        vars::aimbot::air_part_enabled = get_value(data, "aimbot_air_part_enabled", vars::aimbot::air_part_enabled);
+        vars::aimbot::aimbot_hitbox = get_value(data, "aimbot_hitbox", vars::aimbot::aimbot_hitbox);
+        vars::aimbot::ignore_teammates = get_value(data, "aimbot_ignore_teammates", vars::aimbot::ignore_teammates);
+        vars::aimbot::prediction_x = get_value(data, "aimbot_prediction_x", vars::aimbot::prediction_x);
+        vars::aimbot::prediction_y = get_value(data, "aimbot_prediction_y", vars::aimbot::prediction_y);
+        vars::aimbot::prediction_ignore_y = get_value(data, "aimbot_prediction_ignore_y", vars::aimbot::prediction_ignore_y);
+        vars::aimbot::sticky_aim = get_value(data, "aimbot_sticky_aim", vars::aimbot::sticky_aim);
+        vars::aimbot::air_part_enabled = get_value(data, "aimbot_air_part_enabled", vars::aimbot::air_part_enabled);
+        vars::aimbot::air_part_hitbox = get_value(data, "aimbot_air_part_hitbox", vars::aimbot::air_part_hitbox);
+        vars::aimbot::anti_flick = get_value(data, "aimbot_anti_flick", vars::aimbot::anti_flick);
+        vars::aimbot::anti_flick_distance = get_value(data, "aimbot_anti_flick_distance", vars::aimbot::anti_flick_distance);
+        vars::aimbot::smoothing_style = get_value(data, "aimbot_smoothing_style", vars::aimbot::smoothing_style);
+        vars::aimbot::shake = get_value(data, "aimbot_shake", vars::aimbot::shake);
+        vars::aimbot::shake_x = get_value(data, "aimbot_shake_x", vars::aimbot::shake_x);
+        vars::aimbot::shake_y = get_value(data, "aimbot_shake_y", vars::aimbot::shake_y);
+        vars::aimbot::unlock_on_death = get_value(data, "aimbot_unlock_on_death", vars::aimbot::unlock_on_death);
+
+
+
 
         // Triggerbot
         vars::triggerbot::toggled = get_value(data, "triggerbot_toggled", vars::triggerbot::toggled);
@@ -257,6 +310,22 @@ void c_config::load(const std::string& filename)
         vars::lag_switch::lag_interval = get_value(data, "lag_switch_lag_interval", vars::lag_switch::lag_interval);
         vars::lag_switch::auto_lag = get_value(data, "lag_switch_auto_lag", vars::lag_switch::auto_lag);
         vars::lag_switch::manual_lag = get_value(data, "lag_switch_manual_lag", vars::lag_switch::manual_lag);
+
+        // FOV
+        vars::set_fov::set_fov = get_value(data, "set_fov", vars::set_fov::set_fov);
+        vars::set_fov::toggled = get_value(data, "toggled", vars::set_fov::toggled);
+        vars::set_fov::unlock_zoom = get_value(data, "unlock_zoom", vars::set_fov::unlock_zoom);
+
+        // Expander
+        vars::combat::hitbox_expander = get_value(data, "hitbox_expander", vars::combat::hitbox_expander);
+        vars::combat::hitbox_size_x = get_value(data, "hitbox_size_x", vars::combat::hitbox_size_x);
+        vars::combat::hitbox_size_y = get_value(data, "hitbox_size_y", vars::combat::hitbox_size_y);
+        vars::combat::hitbox_size_z = get_value(data, "hitbox_size_z", vars::combat::hitbox_size_z);
+        vars::combat::hitbox_multiplier = get_value(data, "hitbox_multiplier", vars::combat::hitbox_multiplier);
+        vars::combat::hitbox_visible = get_value(data, "hitbox_visible", vars::combat::hitbox_visible);
+        vars::combat::hitbox_can_collide = get_value(data, "hitbox_can_collide", vars::combat::hitbox_can_collide);
+        vars::combat::hitbox_skip_teammates = get_value(data, "hitbox_skip_teammates", vars::combat::hitbox_skip_teammates);
+
 
         std::cout << "Config loaded from " << filename << std::endl;
     }
