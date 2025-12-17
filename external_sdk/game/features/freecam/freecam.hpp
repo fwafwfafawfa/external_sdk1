@@ -4,7 +4,7 @@
 class c_freecam {
 public:
     void run(float dt);
-    void force_third_person(float min_distance = 10.0f, float max_distance = 50.0f);
+    void force_third_person(float min_distance = 15.0f, float max_distance = 15.0f);
     void force_first_person();
     void reset_camera_mode();
     void unlock_camera();

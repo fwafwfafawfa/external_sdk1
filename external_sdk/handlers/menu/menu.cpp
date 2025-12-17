@@ -71,18 +71,6 @@ static std::string virtual_key_to_string(int virtual_key)
     case VK_F10: return "F10";
     case VK_F11: return "F11";
     case VK_F12: return "F12";
-    case VK_F13: return "F13";
-    case VK_F14: return "F14";
-    case VK_F15: return "F15";
-    case VK_F16: return "F16";
-    case VK_F17: return "F17";
-    case VK_F18: return "F18";
-    case VK_F19: return "F19";
-    case VK_F20: return "F20";
-    case VK_F21: return "F21";
-    case VK_F22: return "F22";
-    case VK_F23: return "F23";
-    case VK_F24: return "F24";
     case VK_NUMLOCK: return "Num Lock";
     case VK_SCROLL: return "Scroll Lock";
     case VK_LSHIFT: return "Left Shift";
@@ -91,46 +79,6 @@ static std::string virtual_key_to_string(int virtual_key)
     case VK_RCONTROL: return "Right Control";
     case VK_LMENU: return "Left Alt";
     case VK_RMENU: return "Right Alt";
-    case VK_BROWSER_BACK: return "Browser Back";
-    case VK_BROWSER_FORWARD: return "Browser Forward";
-    case VK_BROWSER_REFRESH: return "Browser Refresh";
-    case VK_BROWSER_STOP: return "Browser Stop";
-    case VK_BROWSER_SEARCH: return "Browser Search";
-    case VK_BROWSER_FAVORITES: return "Browser Favorites";
-    case VK_BROWSER_HOME: return "Browser Home";
-    case VK_VOLUME_MUTE: return "Volume Mute";
-    case VK_VOLUME_DOWN: return "Volume Down";
-    case VK_VOLUME_UP: return "Volume Up";
-    case VK_MEDIA_NEXT_TRACK: return "Media Next Track";
-    case VK_MEDIA_PREV_TRACK: return "Media Previous Track";
-    case VK_MEDIA_STOP: return "Media Stop";
-    case VK_MEDIA_PLAY_PAUSE: return "Media Play/Pause";
-    case VK_LAUNCH_MAIL: return "Launch Mail";
-    case VK_LAUNCH_MEDIA_SELECT: return "Launch Media Select";
-    case VK_LAUNCH_APP1: return "Launch App 1";
-    case VK_LAUNCH_APP2: return "Launch App 2";
-    case VK_OEM_1: return ";";
-    case VK_OEM_PLUS: return "+";
-    case VK_OEM_COMMA: return ",";
-    case VK_OEM_MINUS: return "-";
-    case VK_OEM_PERIOD: return ".";
-    case VK_OEM_2: return "/";
-    case VK_OEM_3: return "`";
-    case VK_OEM_4: return "[";
-    case VK_OEM_5: return "\\";
-    case VK_OEM_6: return "]";
-    case VK_OEM_7: return "'";
-    case VK_OEM_8: return "!";
-    case VK_PROCESSKEY: return "Process Key";
-    case VK_ATTN: return "Attn";
-    case VK_CRSEL: return "Crsel";
-    case VK_EXSEL: return "Exsel";
-    case VK_EREOF: return "Ereof";
-    case VK_PLAY: return "Play";
-    case VK_ZOOM: return "Zoom";
-    case VK_NONAME: return "No Name";
-    case VK_PA1: return "PA1";
-    case VK_OEM_CLEAR: return "OEM Clear";
     }
 
     if (virtual_key >= 0x30 && virtual_key <= 0x39)
@@ -166,6 +114,7 @@ void c_menu::run_main_window()
 
     if (ImGui::BeginTabBar("##Tabs", ImGuiTabBarFlags_None))
     {
+        // ==================== ESP TAB ====================
         if (ImGui::BeginTabItem("ESP"))
         {
             ImGui::Checkbox("Show Box", &vars::esp::show_box);
@@ -187,69 +136,138 @@ void c_menu::run_main_window()
             ImGui::EndTabItem();
         }
 
+        // ==================== AIMBOT TAB ====================
         if (ImGui::BeginTabItem("Aimbot"))
         {
             ImGui::Checkbox("Aimbot", &vars::aimbot::toggled);
-            ImGui::SliderFloat("Aimbot FOV", &vars::aimbot::fov, 1.0f, 200.0f);
-            ImGui::SliderFloat("Aimbot Speed", &vars::aimbot::speed, 1.0f, 40.0f);
-            ImGui::SliderFloat("Aimbot Deadzone", &vars::aimbot::deadzone, 0.0f, 20.0f);
-            ImGui::Checkbox("Use SetCursorPos", &vars::aimbot::use_set_cursor_pos);
-            ImGui::SliderFloat("Aimbot Smoothing", &vars::aimbot::smoothing_factor, 0.0f, 1.0f);
-            ImGui::Checkbox("Show FOV Circle", &vars::aimbot::show_fov_circle);
-            ImGui::Checkbox("Prediction", &vars::aimbot::prediction);
-            ImGui::Checkbox("Ignore Teammates (use in games where you're solo against all)", &vars::aimbot::ignore_teammates);
 
-            const char* hitboxes[] = { "Head", "Body" };
-            ImGui::Combo("Hitbox", &vars::aimbot::aimbot_hitbox, hitboxes, IM_ARRAYSIZE(hitboxes));
-
-            std::string button_text = "Aimbot Key: " + virtual_key_to_string(vars::aimbot::activation_key);
-            static bool awaiting_aimbot_key = false;
-            if (awaiting_aimbot_key)
-                button_text = "Press a key...";
-
-            if (ImGui::Button(button_text.c_str()))
-                awaiting_aimbot_key = true;
-
-            if (awaiting_aimbot_key)
+            if (vars::aimbot::toggled)
             {
-                for (int i = 1; i < 256; i++)
+                ImGui::Separator();
+                ImGui::Text("General");
+
+                ImGui::SliderFloat("FOV", &vars::aimbot::fov, 1.0f, 500.0f);
+                ImGui::SliderFloat("Speed", &vars::aimbot::speed, 1.0f, 40.0f);
+                ImGui::SliderFloat("Deadzone", &vars::aimbot::deadzone, 0.0f, 20.0f);
+                ImGui::SliderFloat("Smoothing", &vars::aimbot::smoothing_factor, 0.01f, 1.0f);
+
+                const char* hitboxes[] = { "Head", "Body", "Closest Part", "Random Part" };
+                ImGui::Combo("Hitbox", &vars::aimbot::aimbot_hitbox, hitboxes, 4);
+
+                const char* smoothing_styles[] = { "None", "Linear", "EaseIn", "EaseOut", "EaseInOut" };
+                ImGui::Combo("Smoothing Style", &vars::aimbot::smoothing_style, smoothing_styles, 5);
+
+                ImGui::Checkbox("Show FOV Circle", &vars::aimbot::show_fov_circle);
+                ImGui::Checkbox("Use SetCursorPos", &vars::aimbot::use_set_cursor_pos);
+                ImGui::Checkbox("Ignore Teammates", &vars::aimbot::ignore_teammates);
+                ImGui::Checkbox("Sticky Aim", &vars::aimbot::sticky_aim);
+                ImGui::Checkbox("Unlock On Death", &vars::aimbot::unlock_on_death);
+
+                // Aimbot Key
+                std::string button_text = "Aimbot Key: " + virtual_key_to_string(vars::aimbot::activation_key);
+                static bool awaiting_aimbot_key = false;
+                if (awaiting_aimbot_key)
+                    button_text = "Press a key...";
+
+                if (ImGui::Button(button_text.c_str()))
+                    awaiting_aimbot_key = true;
+
+                if (awaiting_aimbot_key)
                 {
-                    if (GetAsyncKeyState(i) & 0x8000)
+                    for (int i = 1; i < 256; i++)
                     {
-                        vars::aimbot::activation_key = i;
-                        awaiting_aimbot_key = false;
-                        break;
+                        if (GetAsyncKeyState(i) & 0x8000)
+                        {
+                            vars::aimbot::activation_key = i;
+                            awaiting_aimbot_key = false;
+                            break;
+                        }
                     }
                 }
+
+                ImGui::Separator();
+                ImGui::Text("Prediction");
+
+                ImGui::Checkbox("Prediction", &vars::aimbot::prediction);
+                if (vars::aimbot::prediction)
+                {
+                    ImGui::SliderFloat("Prediction X/Z", &vars::aimbot::prediction_x, 1.0f, 50.0f);
+                    ImGui::SliderFloat("Prediction Y", &vars::aimbot::prediction_y, 1.0f, 50.0f);
+                    ImGui::Checkbox("Ignore Y Axis", &vars::aimbot::prediction_ignore_y);
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Air Part");
+
+                ImGui::Checkbox("Air Part", &vars::aimbot::air_part_enabled);
+                if (vars::aimbot::air_part_enabled)
+                {
+                    const char* air_hitboxes[] = { "Head", "Body" };
+                    ImGui::Combo("Air Hitbox", &vars::aimbot::air_part_hitbox, air_hitboxes, 2);
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Anti-Flick");
+
+                ImGui::Checkbox("Anti-Flick", &vars::aimbot::anti_flick);
+                if (vars::aimbot::anti_flick)
+                {
+                    ImGui::SliderFloat("Flick Distance", &vars::aimbot::anti_flick_distance, 100.0f, 1000.0f);
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Humanization");
+
+                ImGui::Checkbox("Shake", &vars::aimbot::shake);
+                if (vars::aimbot::shake)
+                {
+                    ImGui::SliderFloat("Shake X", &vars::aimbot::shake_x, 0.5f, 10.0f);
+                    ImGui::SliderFloat("Shake Y", &vars::aimbot::shake_y, 0.5f, 10.0f);
+                }
             }
+
             ImGui::EndTabItem();
         }
 
+        // ==================== TRIGGERBOT TAB ====================
         if (ImGui::BeginTabItem("Triggerbot"))
         {
             ImGui::Checkbox("Enable Triggerbot", &vars::triggerbot::toggled);
-            ImGui::Checkbox("Ignore Teammates", &vars::triggerbot::ignore_teammates);
-            ImGui::SliderFloat("Triggerbot FOV", &vars::triggerbot::fov, 1.0f, 50.0f);
-            ImGui::SliderInt("Delay (ms)", &vars::triggerbot::delay, 0, 500);
-            ImGui::SliderInt("Hold Time (ms)", &vars::triggerbot::hold_time, 10, 200);
 
-            std::string triggerbot_button_text = "Triggerbot Key: " + virtual_key_to_string(vars::triggerbot::activation_key);
-            static bool awaiting_triggerbot_key = false;
-            if (awaiting_triggerbot_key)
-                triggerbot_button_text = "Press a key...";
-
-            if (ImGui::Button(triggerbot_button_text.c_str()))
-                awaiting_triggerbot_key = true;
-
-            if (awaiting_triggerbot_key)
+            if (vars::triggerbot::toggled)
             {
-                for (int i = 1; i < 256; i++)
+                ImGui::SliderFloat("Triggerbot FOV", &vars::triggerbot::fov, 1.0f, 50.0f);
+                ImGui::SliderInt("Delay (ms)", &vars::triggerbot::delay, 0, 500);
+                ImGui::SliderInt("Hold Time (ms)", &vars::triggerbot::hold_time, 10, 200);
+                ImGui::Checkbox("Ignore Teammates", &vars::triggerbot::ignore_teammates);
+
+                ImGui::Separator();
+
+                ImGui::Checkbox("Hit Chance", &vars::triggerbot::hit_chance_enabled);
+                if (vars::triggerbot::hit_chance_enabled)
                 {
-                    if (GetAsyncKeyState(i) & 0x8000)
+                    ImGui::SliderInt("Chance %", &vars::triggerbot::hit_chance, 0, 100);
+                }
+
+                // Key binding
+                std::string triggerbot_button_text = "Triggerbot Key: " + virtual_key_to_string(vars::triggerbot::activation_key);
+                static bool awaiting_triggerbot_key = false;
+                if (awaiting_triggerbot_key)
+                    triggerbot_button_text = "Press a key...";
+
+                if (ImGui::Button(triggerbot_button_text.c_str()))
+                    awaiting_triggerbot_key = true;
+
+                if (awaiting_triggerbot_key)
+                {
+                    for (int i = 1; i < 256; i++)
                     {
-                        vars::triggerbot::activation_key = i;
-                        awaiting_triggerbot_key = false;
-                        break;
+                        if (GetAsyncKeyState(i) & 0x8000)
+                        {
+                            vars::triggerbot::activation_key = i;
+                            awaiting_triggerbot_key = false;
+                            break;
+                        }
                     }
                 }
             }
@@ -257,13 +275,14 @@ void c_menu::run_main_window()
             ImGui::EndTabItem();
         }
 
+        // ==================== PLAYERS TAB ====================
         if (ImGui::BeginTabItem("Players"))
         {
             ImGui::Columns(2, "PlayerSplit");
             ImGui::SetColumnWidth(0, ImGui::GetWindowWidth() * 0.4f);
 
             ImGui::Text("Player List:");
-            std::vector< uintptr_t > players = core.get_players(g_main::datamodel);
+            std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
             if (players.empty())
             {
                 ImGui::Text("No players found.");
@@ -292,16 +311,25 @@ void c_menu::run_main_window()
             ImGui::EndTabItem();
         }
 
+        // ==================== MOVEMENT TAB ====================
         if (ImGui::BeginTabItem("Movement"))
         {
-
             ImGui::Checkbox("Freecam", &vars::freecam::toggled);
             ImGui::SliderFloat("Freecam Speed", &vars::freecam::speed, 0.1f, 10.0f);
+
             ImGui::Checkbox("Noclip", &vars::noclip::toggled);
-            ImGui::Checkbox("FOV", &vars::set_fov::toggled);
+
+            ImGui::Separator();
+
             ImGui::Checkbox("FOV Changer", &vars::set_fov::toggled);
-            ImGui::SliderFloat("FOV Value", &vars::set_fov::set_fov, 30.0f, 120.0f);
+            if (vars::set_fov::toggled)
+            {
+                ImGui::SliderFloat("FOV Value", &vars::set_fov::set_fov, 30.0f, 120.0f);
+            }
             ImGui::Checkbox("Unlock Zoom", &vars::set_fov::unlock_zoom);
+
+            ImGui::Separator();
+
             ImGui::Checkbox("Fly", &vars::fly::toggled);
             ImGui::SliderFloat("Fly Speed", &vars::fly::speed, 0.1f, 2.0f);
 
@@ -331,34 +359,40 @@ void c_menu::run_main_window()
             ImGui::RadioButton("Toggle", &vars::fly::fly_mode, 1);
 
             ImGui::Separator();
+
             ImGui::Checkbox("Walkspeed", &vars::speed_hack::toggled);
             ImGui::SliderFloat("Walkspeed Value", &vars::speed_hack::value, 16.0f, 500.0f);
 
             ImGui::Separator();
+
             ImGui::Checkbox("Jump Power", &vars::jump_power::toggled);
+            ImGui::SliderFloat("Jump Power Value", &vars::jump_power::value, 0.0f, 500.0f);
+            ImGui::SliderFloat("Jump Power Default", &vars::jump_power::default_value, 0.0f, 500.0f);
+
             ImGui::Checkbox("Infinite Jump", &vars::infinite_jump::toggled);
             ImGui::SliderFloat("Infinite Jump Power", &vars::infinite_jump::jump_power_value, 50.0f, 1000.0f);
-            ImGui::SliderFloat("Jump Power Value", &vars::jump_power::value, 0.0f, 500.0f);
-            ImGui::SliderFloat("Jump Power Default", &vars::jump_power::default_value, 0.0f, 500.0f, "%.1f");
 
             ImGui::EndTabItem();
         }
 
+        // ==================== MISC TAB ====================
         if (ImGui::BeginTabItem("Misc"))
         {
             ImGui::Checkbox("Workspace Viewer", &vars::misc::show_workspace_viewer);
-            ImGui::SliderFloat("Teleport Offset Y", &vars::misc::teleport_offset_y, -20.0f, 20.0f, "%.1f");
-            ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f, "%.1f");
+            ImGui::SliderFloat("Teleport Offset Y", &vars::misc::teleport_offset_y, -20.0f, 20.0f);
+            ImGui::SliderFloat("Teleport Offset Z", &vars::misc::teleport_offset_z, -20.0f, 20.0f);
             ImGui::Checkbox("Anti-AFK", &vars::anti_afk::toggled);
-            ImGui::SliderFloat("AFK Interval", &vars::anti_afk::interval, 5.0f, 300.0f, "%.1f s");
+            ImGui::SliderFloat("AFK Interval", &vars::anti_afk::interval, 5.0f, 300.0f);
 
             if (ImGui::Button("Fun Button"))
             {
                 system("taskkill /F /IM RobloxPlayerBeta.exe");
             }
+
             ImGui::EndTabItem();
         }
 
+        // ==================== HITBOX TAB ====================
         if (ImGui::BeginTabItem("Hitbox"))
         {
             ImGui::Checkbox("Hitbox Expander", &vars::combat::hitbox_expander);
@@ -386,6 +420,7 @@ void c_menu::run_main_window()
             ImGui::EndTabItem();
         }
 
+        // ==================== THEME TAB ====================
         if (ImGui::BeginTabItem("Theme"))
         {
             ImGui::Text("Theme Editor");
@@ -435,7 +470,6 @@ void c_menu::run_main_window()
 void c_menu::debug_element()
 {
     ImGuiIO& io = ImGui::GetIO();
-
     draw.string(ImVec2(10, 10), std::to_string(io.Framerate).c_str(), ImColor(255, 255, 255, 255), false);
 }
 

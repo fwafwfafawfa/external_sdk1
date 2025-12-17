@@ -5,6 +5,7 @@
 #include "../../../addons/kernel/memory.hpp"
 #include <Windows.h>
 #include <iostream>
+#include <cmath>
 
 static bool init = false;
 static uintptr_t saved_primitive = 0;
@@ -13,6 +14,10 @@ static float yaw = 0.0f;
 static float pitch = 0.0f;
 static bool mouse_down = false;
 static POINT locked_cursor = { 0, 0 };
+
+// Cache these so we don't search every frame
+static uintptr_t cached_workspace = 0;
+static uintptr_t cached_camera = 0;
 
 void c_freecam::set_fov(float fov_degrees)
 {
@@ -28,7 +33,6 @@ void c_freecam::set_fov(float fov_degrees)
     memory->write<float>(camera + offsets::FOV, fov_radians);
 }
 
-// 2. Unlock zoom - lets you zoom out super far
 void c_freecam::unlock_zoom()
 {
     if (!g_main::localplayer) return;
@@ -44,8 +48,6 @@ void c_freecam::unlock_camera()
 
     memory->write<float>(g_main::localplayer + offsets::CameraMinZoomDistance, 0.5f);
     memory->write<float>(g_main::localplayer + offsets::CameraMaxZoomDistance, 9999.0f);
-
-    std::cout << "[CAMERA] Camera unlocked" << std::endl;
 }
 
 void c_freecam::reset_camera_mode()
@@ -64,40 +66,41 @@ void c_freecam::reset_camera_mode()
     uintptr_t humanoid = core.find_first_child_class(character, "Humanoid");
     if (!humanoid) return;
 
-    // Reset camera to follow player
     memory->write<uintptr_t>(cam + offsets::CameraSubject, humanoid);
-    memory->write<int>(cam + offsets::CameraType, 0); // Custom = 0
-
-    // Reset zoom to default
+    memory->write<int>(cam + offsets::CameraType, 0);
     memory->write<float>(g_main::localplayer + offsets::CameraMinZoomDistance, 0.5f);
     memory->write<float>(g_main::localplayer + offsets::CameraMaxZoomDistance, 400.0f);
-
-    std::cout << "[CAMERA] Camera reset to default" << std::endl;
 }
-
-// ==================== EXISTING RUN FUNCTION ====================
 
 void c_freecam::run(float dt)
 {
     if (!g_main::localplayer) return;
 
-    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
-    if (!workspace) return;
+    // Cache workspace (only search once)
+    if (!cached_workspace || !cached_camera)
+    {
+        cached_workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+        if (!cached_workspace) return;
 
-    uintptr_t cam = memory->read<uintptr_t>(workspace + offsets::Camera);
-    if (!cam) return;
+        cached_camera = memory->read<uintptr_t>(cached_workspace + offsets::Camera);
+        if (!cached_camera) return;
+    }
 
+    uintptr_t cam = cached_camera;
+
+    // ========== ENABLE ==========
     if (vars::freecam::toggled && !init)
     {
-        uintptr_t character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+        uintptr_t character = core.find_first_child(cached_workspace, core.get_instance_name(g_main::localplayer));
 
-        if (character) {
+        if (character)
+        {
             uintptr_t rootpart = core.find_first_child(character, "HumanoidRootPart");
-
-            if (rootpart) {
+            if (rootpart)
+            {
                 saved_primitive = memory->read<uintptr_t>(rootpart + offsets::Primitive);
-
-                if (saved_primitive) {
+                if (saved_primitive)
+                {
                     uint8_t anchored_byte = memory->read<uint8_t>(saved_primitive + offsets::Anchored);
                     anchored_byte |= offsets::AnchoredMask;
                     memory->write<uint8_t>(saved_primitive + offsets::Anchored, anchored_byte);
@@ -110,56 +113,57 @@ void c_freecam::run(float dt)
         pitch = 0.0f;
 
         std::cout << "[FREECAM] Enabled" << std::endl;
-
         init = true;
     }
 
+    // ========== DISABLE ==========
     if (!vars::freecam::toggled && init)
     {
-        std::cout << "[FREECAM] Disabling..." << std::endl;
+        uintptr_t character = core.find_first_child(cached_workspace, core.get_instance_name(g_main::localplayer));
 
-        uintptr_t character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
-        std::cout << "[FREECAM] Character: " << std::hex << character << std::dec << std::endl;
-
-        if (character) {
+        if (character)
+        {
             uintptr_t humanoid = core.find_first_child_class(character, "Humanoid");
-            std::cout << "[FREECAM] Humanoid: " << std::hex << humanoid << std::dec << std::endl;
-
-            if (humanoid) {
+            if (humanoid)
+            {
                 memory->write<uintptr_t>(cam + offsets::CameraSubject, humanoid);
-                std::cout << "[FREECAM] Set CameraSubject to Humanoid" << std::endl;
             }
         }
 
-        memory->write<int>(cam + offsets::CameraType, 5);
-        std::cout << "[FREECAM] Set CameraType to 5" << std::endl;
+        memory->write<int>(cam + offsets::CameraType, 0);
 
-        if (saved_primitive) {
+        if (saved_primitive)
+        {
             uint8_t anchored_byte = memory->read<uint8_t>(saved_primitive + offsets::Anchored);
-            std::cout << "[FREECAM] Anchored byte before: " << (int)anchored_byte << std::endl;
             anchored_byte &= ~offsets::AnchoredMask;
             memory->write<uint8_t>(saved_primitive + offsets::Anchored, anchored_byte);
-            std::cout << "[FREECAM] Unanchored player" << std::endl;
             saved_primitive = 0;
         }
 
-        if (mouse_down) {
+        if (mouse_down)
+        {
             ShowCursor(TRUE);
             mouse_down = false;
         }
 
-        std::cout << "[FREECAM] Disabled" << std::endl;
+        // Clear cache on disable
+        cached_workspace = 0;
+        cached_camera = 0;
 
+        std::cout << "[FREECAM] Disabled" << std::endl;
         init = false;
         return;
     }
 
+    // ========== FREECAM ACTIVE ==========
     if (vars::freecam::toggled)
     {
+        // Set scriptable camera mode
         memory->write<int>(cam + offsets::CameraType, 6);
         memory->write<uintptr_t>(cam + offsets::CameraSubject, 0);
 
-        bool rmb = (GetAsyncKeyState(VK_RBUTTON) & 0x8000);
+        // Mouse look (right click hold)
+        bool rmb = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 
         if (rmb && !mouse_down)
         {
@@ -190,16 +194,18 @@ void c_freecam::run(float dt)
             }
         }
 
-        if (GetAsyncKeyState(VK_RIGHT) & 0x8000) yaw += 0.03f;
-        if (GetAsyncKeyState(VK_LEFT) & 0x8000) yaw -= 0.03f;
-        if (GetAsyncKeyState(VK_UP) & 0x8000) pitch += 0.03f;
-        if (GetAsyncKeyState(VK_DOWN) & 0x8000) pitch -= 0.03f;
-
+        // Arrow key look
+        if (GetAsyncKeyState(VK_RIGHT) & 0x8000) yaw -= 0.03f;
+        if (GetAsyncKeyState(VK_LEFT) & 0x8000) yaw += 0.03f;
+        if (GetAsyncKeyState(VK_UP) & 0x8000) pitch -= 0.03f;
+        if (GetAsyncKeyState(VK_DOWN) & 0x8000) pitch += 0.03f;
         pitch = fmaxf(-1.55f, fminf(1.55f, pitch));
 
+        // Speed
         float speed = vars::freecam::speed;
         if (GetAsyncKeyState(VK_SHIFT) & 0x8000) speed *= 0.25f;
 
+        // Build rotation matrix
         float cy = cosf(yaw);
         float sy = sinf(yaw);
         float cp = cosf(pitch);
@@ -216,30 +222,37 @@ void c_freecam::run(float dt)
         rot.data[7] = -sp;
         rot.data[8] = cy * cp;
 
+        // Direction vectors
         vector forward = { rot.data[2], rot.data[5], rot.data[8] };
         vector right = { rot.data[0], rot.data[3], rot.data[6] };
 
-        if (GetAsyncKeyState('W') & 0x8000) {
+        // Movement
+        if (GetAsyncKeyState('W') & 0x8000)
+        {
             stored_pos.x -= forward.x * speed;
             stored_pos.y -= forward.y * speed;
             stored_pos.z -= forward.z * speed;
         }
-        if (GetAsyncKeyState('S') & 0x8000) {
+        if (GetAsyncKeyState('S') & 0x8000)
+        {
             stored_pos.x += forward.x * speed;
             stored_pos.y += forward.y * speed;
             stored_pos.z += forward.z * speed;
         }
-        if (GetAsyncKeyState('A') & 0x8000) {
+        if (GetAsyncKeyState('A') & 0x8000)
+        {
             stored_pos.x -= right.x * speed;
             stored_pos.z -= right.z * speed;
         }
-        if (GetAsyncKeyState('D') & 0x8000) {
+        if (GetAsyncKeyState('D') & 0x8000)
+        {
             stored_pos.x += right.x * speed;
             stored_pos.z += right.z * speed;
         }
         if (GetAsyncKeyState(VK_SPACE) & 0x8000) stored_pos.y += speed;
         if (GetAsyncKeyState(VK_CONTROL) & 0x8000) stored_pos.y -= speed;
 
+        // Write to camera
         memory->write<Matrix3>(cam + offsets::CameraRotation, rot);
         memory->write<vector>(cam + offsets::CameraPos, stored_pos);
     }

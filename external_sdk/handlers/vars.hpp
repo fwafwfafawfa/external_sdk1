@@ -48,6 +48,10 @@ namespace vars
         inline float fov = 15.0f;
         inline int delay = 50;
         inline int hold_time = 50;
+        inline bool use_prediction = true;      // NEW: Use aimbot's prediction
+        inline bool only_when_aiming = false;   // NEW: Only trigger when aimbot is aiming
+        inline bool hit_chance_enabled = false; // NEW: Random chance to fire
+        inline int hit_chance = 100;            // NEW: Percentage (0-100)
     }
 
     namespace aimbot
@@ -63,6 +67,29 @@ namespace vars
         inline bool ignore_teammates = true;
         inline bool show_fov_circle = true; // New: Toggle for FOV circle
         inline bool prediction = false; // New: Toggle for aimbot prediction
+        inline float prediction_x = 10.0f;  // Lower = more prediction (divisor)
+        inline float prediction_y = 15.0f;  // Usually want less Y prediction
+        inline bool prediction_ignore_y = true;
+        inline bool sticky_aim = false;
+
+        // Air Part (different hitbox when target is jumping)
+        inline bool air_part_enabled = false;
+        inline int air_part_hitbox = 1; // 0 = Head, 1 = Body
+
+        // Anti-Flick
+        inline bool anti_flick = false;
+        inline float anti_flick_distance = 500.0f;
+
+        // Smoothing Style
+        inline int smoothing_style = 1; // 0 = None, 1 = Linear, 2 = EaseIn, 3 = EaseOut, 4 = EaseInOut
+
+        // Shake (humanization)
+        inline bool shake = false;
+        inline float shake_x = 2.0f;
+        inline float shake_y = 2.0f;
+
+        // Unlock on death
+        inline bool unlock_on_death = true;
     }
 
     namespace combat {
@@ -86,7 +113,7 @@ namespace vars
     {
         inline bool toggled = false;
         inline float speed = 2.0f;
-        inline float sensitivity = 0.002f;
+        inline float sensitivity = 0.003f;
     }
 
     namespace set_fov 

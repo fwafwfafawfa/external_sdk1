@@ -28,6 +28,7 @@ public:
     float smoothed_delta_x = 0.0f;
     float smoothed_delta_y = 0.0f;
     uintptr_t locked_target = 0;
+    vector last_target_pos = { 0, 0, 0 };
 
     static std::vector<WorldPart> geometry;
     static double last_refresh;
@@ -43,6 +44,14 @@ public:
     static int hitbox_processed_count;  // PUBLIC
     static void apply_hitbox_expander();
     static std::mutex players_mtx;
+    const char* get_target_bone_name(uintptr_t model, uintptr_t player);
+    const char* get_closest_part_name(uintptr_t model);
+    const char* get_random_part_name();
+    vector predict_position(vector current_pos, vector velocity, vector cam_pos);
+    float apply_easing(float t, int style);
+    void perform_aim(float delta_x, float delta_y, float target_x, float target_y);
+    void run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta_x, float delta_y, vector cam_pos, vector w_target_bone_pos);
+    void reset_aim_state();
 
     void update_world_cache();
     void calculate_fps();

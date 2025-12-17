@@ -520,6 +520,10 @@ void c_esp::run_players(view_matrix_t viewmatrix)
 
 void c_esp::run_aimbot(view_matrix_t viewmatrix)
 {
+    // Safety checks at start
+    if (!g_main::datamodel) return;
+    if (!g_main::localplayer) return;
+    // Cache update
     static auto last_cache_update = std::chrono::high_resolution_clock::now();
     auto now_time = std::chrono::high_resolution_clock::now();
     if (std::chrono::duration_cast<std::chrono::seconds>(now_time - last_cache_update).count() >= 5)
@@ -528,22 +532,26 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         last_cache_update = now_time;
     }
 
+    // Get players
     std::vector<uintptr_t> players;
     {
         std::lock_guard<std::mutex> lock(c_esp::players_mtx);
         players = core.get_players(g_main::datamodel);
     }
 
+    // Screen center
     vector2d crosshair_pos = {
         static_cast<float>(core.get_screen_width() / 2),
         static_cast<float>(core.get_screen_height() / 2)
     };
 
+    // Draw FOV circle
     if (vars::aimbot::show_fov_circle)
     {
         draw.circle(ImVec2(crosshair_pos.x, crosshair_pos.y), vars::aimbot::fov, ImColor(255, 255, 255, 255), 1.0f);
     }
 
+    // Check if aimbot/triggerbot active
     bool aimbot_active = vars::aimbot::toggled && GetAsyncKeyState(vars::aimbot::activation_key);
     bool triggerbot_active = vars::triggerbot::toggled && GetAsyncKeyState(vars::triggerbot::activation_key);
 
@@ -554,10 +562,12 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         this->smoothed_delta_x = 0.0f;
         this->smoothed_delta_y = 0.0f;
         this->locked_target = 0;
+        this->last_target_pos = { 0, 0, 0 };
         trigger_waiting = false;
         return;
     }
 
+    // Get camera
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     uintptr_t camera = core.find_first_child_class(workspace, "Camera");
     vector cam_pos = {};
@@ -565,19 +575,18 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         cam_pos = memory->read<vector>(camera + offsets::CameraPos);
 
     uintptr_t current_target = 0;
+    uintptr_t current_target_model = 0;
 
-    // ========== LOCKED TARGET VALIDATION ==========
-    if (this->locked_target != 0 && aimbot_active)
+    // ========== STICKY AIM - Keep locked target if valid ==========
+    if (vars::aimbot::sticky_aim && this->locked_target != 0 && aimbot_active)
     {
         bool locked_target_still_valid = false;
         for (auto& player : players)
         {
             if (player == this->locked_target)
             {
-                // FIXED: Only check team if ignore_teammates is enabled
-                bool should_ignore_team = (aimbot_active && vars::aimbot::ignore_teammates) ||
-                    (triggerbot_active && vars::triggerbot::ignore_teammates);
-                if (should_ignore_team)
+                // Team check
+                if (vars::aimbot::ignore_teammates)
                 {
                     uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
                     if (player_team == g_main::localplayer_team && player_team != 0)
@@ -594,34 +603,39 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                     if (humanoid)
                     {
                         float health = memory->read<float>(humanoid + offsets::Health);
+
+                        // Unlock on death check
+                        if (vars::aimbot::unlock_on_death && health <= 0.0f)
+                        {
+                            this->locked_target = 0;
+                            break;
+                        }
+
                         if (health > 0.0f)
                         {
-                            const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
+                            // Get target bone based on settings
+                            const char* target_bone_name = get_target_bone_name(model, player);
                             auto target_bone = core.find_first_child(model, target_bone_name);
+
                             if (target_bone)
                             {
                                 auto p_target_bone = memory->read<uintptr_t>(target_bone + offsets::Primitive);
                                 if (p_target_bone)
                                 {
-                                    auto player_root_part = core.find_first_child(model, "HumanoidRootPart");
-                                    if (!player_root_part) break;
-                                    auto p_player_root = memory->read<uintptr_t>(player_root_part + offsets::Primitive);
-                                    if (!p_player_root) break;
                                     vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
-                                    vector v_player_root = memory->read<vector>(p_player_root + offsets::Velocity);
-
                                     vector2d s_target_bone_pos;
+
                                     if (core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
                                     {
                                         float distance = sqrtf(
                                             powf(s_target_bone_pos.x - crosshair_pos.x, 2) +
                                             powf(s_target_bone_pos.y - crosshair_pos.y, 2)
                                         );
-                                        if (distance < vars::aimbot::fov)
-                                        {
-                                            locked_target_still_valid = true;
-                                            current_target = this->locked_target;
-                                        }
+
+                                        // Keep locked even if out of FOV when sticky aim is on
+                                        locked_target_still_valid = true;
+                                        current_target = this->locked_target;
+                                        current_target_model = model;
                                     }
                                 }
                             }
@@ -637,9 +651,10 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
     }
 
     // ========== FIND NEW TARGET ==========
-    if (this->locked_target == 0)
+    if (this->locked_target == 0 || !vars::aimbot::sticky_aim)
     {
         uintptr_t new_closest_player = 0;
+        uintptr_t new_closest_model = 0;
         float new_closest_distance = FLT_MAX;
         float search_fov = aimbot_active ? vars::aimbot::fov : vars::triggerbot::fov;
 
@@ -648,10 +663,8 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             if (!player || player == g_main::localplayer)
                 continue;
 
-            // FIXED: Only check team if ignore_teammates is enabled
-            bool should_ignore_team = (aimbot_active && vars::aimbot::ignore_teammates) ||
-                (triggerbot_active && vars::triggerbot::ignore_teammates);
-            if (should_ignore_team)
+            // Team check
+            if (vars::aimbot::ignore_teammates)
             {
                 uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
                 if (player_team == g_main::localplayer_team && player_team != 0)
@@ -678,7 +691,8 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             if (!p_player_root)
                 continue;
 
-            const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
+            // Get target bone based on settings
+            const char* target_bone_name = get_target_bone_name(model, player);
             auto target_bone = core.find_first_child(model, target_bone_name);
             if (!target_bone)
                 continue;
@@ -688,7 +702,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                 continue;
 
             vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
-            vector v_player_root = memory->read<vector>(p_player_root + offsets::Velocity);
 
             vector2d s_target_bone_pos;
             if (!core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
@@ -703,31 +716,96 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             {
                 new_closest_distance = distance;
                 new_closest_player = player;
+                new_closest_model = model;
             }
         }
-        current_target = new_closest_player;
-        if (aimbot_active)
-            this->locked_target = new_closest_player;
+
+        if (new_closest_player)
+        {
+            current_target = new_closest_player;
+            current_target_model = new_closest_model;
+            if (aimbot_active)
+                this->locked_target = new_closest_player;
+        }
     }
 
     // ========== AIM AT TARGET ==========
-    if (current_target)
+    if (current_target && current_target_model)
     {
-        auto model = core.get_model_instance(current_target);
+        auto model = current_target_model;
         auto player_root = core.find_first_child(model, "HumanoidRootPart");
         auto p_player_root = memory->read<uintptr_t>(player_root + offsets::Primitive);
         vector v_player_root = memory->read<vector>(p_player_root + offsets::Velocity);
 
-        const char* target_bone_name = (vars::aimbot::aimbot_hitbox == 0) ? "Head" : "HumanoidRootPart";
+        // Check if target is jumping (for air part)
+        bool is_jumping = false;
+        if (vars::aimbot::air_part_enabled)
+        {
+            is_jumping = v_player_root.y > 5.0f;
+        }
+
+        // Get target bone (air part or regular)
+        const char* target_bone_name;
+        if (is_jumping && vars::aimbot::air_part_enabled)
+        {
+            target_bone_name = (vars::aimbot::air_part_hitbox == 0) ? "Head" : "HumanoidRootPart";
+        }
+        else
+        {
+            target_bone_name = get_target_bone_name(model, current_target);
+        }
+
         auto target_bone = core.find_first_child(model, target_bone_name);
+        if (!target_bone)
+        {
+            reset_aim_state();
+            return;
+        }
+
         auto p_target_bone = memory->read<uintptr_t>(target_bone + offsets::Primitive);
+        if (!p_target_bone)
+        {
+            reset_aim_state();
+            return;
+        }
+
         vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
 
+        // ========== ANTI-FLICK ==========
+        if (vars::aimbot::anti_flick && this->last_target_pos.x != 0)
+        {
+            float jump_distance = sqrtf(
+                powf(w_target_bone_pos.x - this->last_target_pos.x, 2) +
+                powf(w_target_bone_pos.y - this->last_target_pos.y, 2) +
+                powf(w_target_bone_pos.z - this->last_target_pos.z, 2)
+            );
+
+            if (jump_distance > vars::aimbot::anti_flick_distance)
+            {
+                // Target teleported, unlock and skip this frame
+                this->locked_target = 0;
+                this->last_target_pos = w_target_bone_pos;
+                reset_aim_state();
+                return;
+            }
+        }
+        this->last_target_pos = w_target_bone_pos;
+
+        // ========== PREDICTION ==========
         if (vars::aimbot::prediction)
         {
-            w_target_bone_pos.x += v_player_root.x * 0.05f;
-            w_target_bone_pos.y += v_player_root.y * 0.05f;
-            w_target_bone_pos.z += v_player_root.z * 0.05f;
+            w_target_bone_pos = predict_position(w_target_bone_pos, v_player_root, cam_pos);
+        }
+
+        // ========== SHAKE (Humanization) ==========
+        if (vars::aimbot::shake)
+        {
+            static std::random_device rd;
+            static std::mt19937 gen(rd());
+            static std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+
+            w_target_bone_pos.x += dist(gen) * vars::aimbot::shake_x * 0.1f;
+            w_target_bone_pos.y += dist(gen) * vars::aimbot::shake_y * 0.1f;
         }
 
         vector2d s_target_bone_pos;
@@ -739,132 +817,348 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             // ========== TRIGGERBOT ==========
             if (triggerbot_active)
             {
-                float distance = sqrtf(delta_x * delta_x + delta_y * delta_y);
-                if (distance < vars::triggerbot::fov)
-                {
-                    vector w_player_root = memory->read<vector>(p_player_root + offsets::Position);
-                    vector w_head = w_target_bone_pos;
-                    vector w_pelvis = w_player_root;
-                    vector w_torso = w_player_root;
-                    vector w_left_foot = w_player_root;
-                    vector w_right_foot = w_player_root;
-
-                    auto torso_part = core.find_first_child(model, "Torso");
-                    if (torso_part)
-                    {
-                        auto p_torso = memory->read<uintptr_t>(torso_part + offsets::Primitive);
-                        if (p_torso) w_torso = memory->read<vector>(p_torso + offsets::Position);
-                    }
-
-                    auto left_leg = core.find_first_child(model, "Left Leg");
-                    if (left_leg)
-                    {
-                        auto p_left = memory->read<uintptr_t>(left_leg + offsets::Primitive);
-                        if (p_left) w_left_foot = memory->read<vector>(p_left + offsets::Position);
-                    }
-
-                    auto right_leg = core.find_first_child(model, "Right Leg");
-                    if (right_leg)
-                    {
-                        auto p_right = memory->read<uintptr_t>(right_leg + offsets::Primitive);
-                        if (p_right) w_right_foot = memory->read<vector>(p_right + offsets::Position);
-                    }
-
-                    if (camera && !is_visible(cam_pos, w_head, w_torso, w_pelvis, w_left_foot, w_right_foot, model))
-                    {
-                        trigger_waiting = false;
-                    }
-                    else
-                    {
-                        auto now = std::chrono::steady_clock::now();
-                        if (!trigger_waiting)
-                        {
-                            trigger_fire_time = now + std::chrono::milliseconds(vars::triggerbot::delay);
-                            trigger_waiting = true;
-                        }
-
-                        if (now >= trigger_fire_time)
-                        {
-                            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-                            auto release_time = now + std::chrono::milliseconds(vars::triggerbot::hold_time);
-                            while (std::chrono::steady_clock::now() < release_time) {}
-                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
-                            trigger_waiting = false;
-                        }
-                    }
-                }
-                else
-                {
-                    trigger_waiting = false;
-                }
+                run_triggerbot(model, p_player_root, delta_x, delta_y, cam_pos, w_target_bone_pos);
             }
 
             // ========== AIMBOT MOVEMENT ==========
             if (aimbot_active)
             {
-                this->smoothed_delta_x = (delta_x * vars::aimbot::smoothing_factor) + (this->smoothed_delta_x * (1.0f - vars::aimbot::smoothing_factor));
-                this->smoothed_delta_y = (delta_y * vars::aimbot::smoothing_factor) + (this->smoothed_delta_y * (1.0f - vars::aimbot::smoothing_factor));
-
-                if (abs(this->smoothed_delta_x) < vars::aimbot::deadzone && abs(this->smoothed_delta_y) < vars::aimbot::deadzone)
-                {
-                    this->leftover_x = 0.0f;
-                    this->leftover_y = 0.0f;
-                    return;
-                }
-
-                float aim_delta_x = this->smoothed_delta_x / vars::aimbot::speed;
-                float aim_delta_y = this->smoothed_delta_y / vars::aimbot::speed;
-
-                if (vars::aimbot::use_set_cursor_pos)
-                {
-                    int target_x = static_cast<int>(s_target_bone_pos.x);
-                    int target_y = static_cast<int>(s_target_bone_pos.y);
-                    POINT current_mouse_pos;
-                    GetCursorPos(&current_mouse_pos);
-                    float smooth_factor = 1.0f / vars::aimbot::speed;
-                    int move_x = static_cast<int>(current_mouse_pos.x + (target_x - current_mouse_pos.x) * smooth_factor);
-                    int move_y = static_cast<int>(current_mouse_pos.y + (target_y - current_mouse_pos.y) * smooth_factor);
-                    if (move_x == current_mouse_pos.x && target_x != current_mouse_pos.x)
-                        move_x += (target_x > current_mouse_pos.x ? 1 : -1);
-                    if (move_y == current_mouse_pos.y && target_y != current_mouse_pos.y)
-                        move_y += (target_y > current_mouse_pos.y ? 1 : -1);
-                    SetCursorPos(move_x, move_y);
-                    this->leftover_x = 0.0f;
-                    this->leftover_y = 0.0f;
-                }
-                else
-                {
-                    aim_delta_x += this->leftover_x;
-                    aim_delta_y += this->leftover_y;
-                    LONG move_x = static_cast<LONG>(aim_delta_x);
-                    LONG move_y = static_cast<LONG>(aim_delta_y);
-                    this->leftover_x = aim_delta_x - move_x;
-                    this->leftover_y = aim_delta_y - move_y;
-                    INPUT input = {};
-                    input.type = INPUT_MOUSE;
-                    input.mi.dx = move_x;
-                    input.mi.dy = move_y;
-                    input.mi.dwFlags = MOUSEEVENTF_MOVE;
-                    SendInput(1, &input, sizeof(INPUT));
-                }
+                perform_aim(delta_x, delta_y, s_target_bone_pos.x, s_target_bone_pos.y);
             }
         }
         else
         {
-            this->leftover_x = 0.0f;
-            this->leftover_y = 0.0f;
-            this->smoothed_delta_x = 0.0f;
-            this->smoothed_delta_y = 0.0f;
+            reset_aim_state();
         }
     }
     else
     {
-        this->leftover_x = 0.0f;
-        this->leftover_y = 0.0f;
-        this->smoothed_delta_x = 0.0f;
-        this->smoothed_delta_y = 0.0f;
+        reset_aim_state();
         trigger_waiting = false;
     }
+}
+
+// ========== HELPER FUNCTIONS ==========
+
+const char* c_esp::get_target_bone_name(uintptr_t model, uintptr_t player)
+{
+    switch (vars::aimbot::aimbot_hitbox)
+    {
+    case 0: return "Head";
+    case 1: return "HumanoidRootPart";
+    case 2: return get_closest_part_name(model);
+    case 3: return get_random_part_name();
+    default: return "Head";
+    }
+}
+
+const char* c_esp::get_closest_part_name(uintptr_t model)
+{
+    if (!model) return "Head"; // Safety check
+    const char* parts[] = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftHand", "RightHand", "LeftFoot", "RightFoot" };
+    const char* fallback_parts[] = { "Head", "HumanoidRootPart", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" };
+
+    POINT p;
+    GetCursorPos(&p);
+    HWND rw = FindWindowA(nullptr, "Roblox");
+    if (rw) ScreenToClient(rw, &p);
+
+    float best_dist = FLT_MAX;
+    const char* best_part = "Head";
+
+    // Try R15 parts first
+    for (int i = 0; i < 8; i++)
+    {
+        auto part = core.find_first_child(model, parts[i]);
+        if (!part) continue;
+
+        auto p_part = memory->read<uintptr_t>(part + offsets::Primitive);
+        if (!p_part) continue;
+
+        vector w_pos = memory->read<vector>(p_part + offsets::Position);
+        vector2d s_pos;
+
+        view_matrix_t vm = memory->read<view_matrix_t>(g_main::v_engine + offsets::viewmatrix);
+        if (!core.world_to_screen(w_pos, s_pos, vm)) continue;
+
+        float dx = p.x - s_pos.x;
+        float dy = p.y - s_pos.y;
+        float dist = dx * dx + dy * dy;
+
+        if (dist < best_dist)
+        {
+            best_dist = dist;
+            best_part = parts[i];
+        }
+    }
+
+    // Try R6 parts if no R15 found
+    if (best_dist == FLT_MAX)
+    {
+        for (int i = 0; i < 7; i++)
+        {
+            auto part = core.find_first_child(model, fallback_parts[i]);
+            if (!part) continue;
+
+            auto p_part = memory->read<uintptr_t>(part + offsets::Primitive);
+            if (!p_part) continue;
+
+            vector w_pos = memory->read<vector>(p_part + offsets::Position);
+            vector2d s_pos;
+
+            view_matrix_t vm = memory->read<view_matrix_t>(g_main::v_engine + offsets::viewmatrix);
+            if (!core.world_to_screen(w_pos, s_pos, vm)) continue;
+
+            float dx = p.x - s_pos.x;
+            float dy = p.y - s_pos.y;
+            float dist = dx * dx + dy * dy;
+
+            if (dist < best_dist)
+            {
+                best_dist = dist;
+                best_part = fallback_parts[i];
+            }
+        }
+    }
+
+    return best_part;
+}
+
+const char* c_esp::get_random_part_name()
+{
+    const char* parts[] = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso" };
+    return parts[rand() % 4];
+}
+
+vector c_esp::predict_position(vector current_pos, vector velocity, vector cam_pos)
+{
+    vector predicted = current_pos;
+
+    // Safety check for bad values
+    if (isnan(velocity.x) || isnan(velocity.y) || isnan(velocity.z))
+        return current_pos;
+
+    if (vars::aimbot::prediction_x <= 0.0f)
+        return current_pos;
+
+    // Calculate distance for scaling
+    float dx = current_pos.x - cam_pos.x;
+    float dy = current_pos.y - cam_pos.y;
+    float dz = current_pos.z - cam_pos.z;
+    float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+
+    // Scale prediction by distance (further = more prediction)
+    float distance_scale = distance / 50.0f;
+    distance_scale = fmaxf(0.5f, fminf(distance_scale, 2.0f));
+
+    // Apply prediction with separate X/Y divisors
+    predicted.x += (velocity.x / vars::aimbot::prediction_x) * distance_scale;
+    predicted.z += (velocity.z / vars::aimbot::prediction_x) * distance_scale;
+
+    // Only predict Y if not ignored
+    if (!vars::aimbot::prediction_ignore_y)
+    {
+        predicted.y += (velocity.y / vars::aimbot::prediction_y) * distance_scale;
+    }
+
+    return predicted;
+}
+
+void c_esp::perform_aim(float delta_x, float delta_y, float target_x, float target_y)
+{
+    float base_smooth = vars::aimbot::smoothing_factor;
+    float eased_smooth = apply_easing(base_smooth, vars::aimbot::smoothing_style);
+
+    this->smoothed_delta_x = (delta_x * eased_smooth) + (this->smoothed_delta_x * (1.0f - eased_smooth));
+    this->smoothed_delta_y = (delta_y * eased_smooth) + (this->smoothed_delta_y * (1.0f - eased_smooth));
+
+    if (abs(this->smoothed_delta_x) < vars::aimbot::deadzone && abs(this->smoothed_delta_y) < vars::aimbot::deadzone)
+    {
+        this->leftover_x = 0.0f;
+        this->leftover_y = 0.0f;
+        return;
+    }
+
+    float aim_delta_x = this->smoothed_delta_x / vars::aimbot::speed;
+    float aim_delta_y = this->smoothed_delta_y / vars::aimbot::speed;
+
+    if (vars::aimbot::use_set_cursor_pos)
+    {
+        int tx = static_cast<int>(target_x);
+        int ty = static_cast<int>(target_y);
+        POINT current_mouse_pos;
+        GetCursorPos(&current_mouse_pos);
+        float smooth_factor = 1.0f / vars::aimbot::speed;
+        int move_x = static_cast<int>(current_mouse_pos.x + (tx - current_mouse_pos.x) * smooth_factor);
+        int move_y = static_cast<int>(current_mouse_pos.y + (ty - current_mouse_pos.y) * smooth_factor);
+        if (move_x == current_mouse_pos.x && tx != current_mouse_pos.x)
+            move_x += (tx > current_mouse_pos.x ? 1 : -1);
+        if (move_y == current_mouse_pos.y && ty != current_mouse_pos.y)
+            move_y += (ty > current_mouse_pos.y ? 1 : -1);
+        SetCursorPos(move_x, move_y);
+        this->leftover_x = 0.0f;
+        this->leftover_y = 0.0f;
+    }
+    else
+    {
+        aim_delta_x += this->leftover_x;
+        aim_delta_y += this->leftover_y;
+        LONG move_x = static_cast<LONG>(aim_delta_x);
+        LONG move_y = static_cast<LONG>(aim_delta_y);
+        this->leftover_x = aim_delta_x - move_x;
+        this->leftover_y = aim_delta_y - move_y;
+        INPUT input = {};
+        input.type = INPUT_MOUSE;
+        input.mi.dx = move_x;
+        input.mi.dy = move_y;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
+        SendInput(1, &input, sizeof(INPUT));
+    }
+}
+
+float c_esp::apply_easing(float t, int style)
+{
+    t = fmaxf(0.0f, fminf(1.0f, t));
+
+    switch (style)
+    {
+    case 0: return t; // None
+    case 1: return t; // Linear
+    case 2: return t * t; // EaseIn
+    case 3: return t * (2.0f - t); // EaseOut
+    case 4: return (t < 0.5f) ? (2.0f * t * t) : (1.0f - powf(-2.0f * t + 2.0f, 2.0f) / 2.0f); // EaseInOut
+    default: return t;
+    }
+}
+
+void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta_x, float delta_y, vector cam_pos, vector w_target_bone_pos)
+{
+    static bool trigger_mouse_down = false;
+    static std::chrono::steady_clock::time_point trigger_release_time;
+    static std::chrono::steady_clock::time_point last_fire_time;
+
+    auto now = std::chrono::steady_clock::now();
+
+    // ========== HANDLE MOUSE RELEASE (non-blocking) ==========
+    if (trigger_mouse_down)
+    {
+        if (now >= trigger_release_time)
+        {
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+            trigger_mouse_down = false;
+        }
+        return; // Don't do anything else while holding
+    }
+
+    // ========== CALCULATE DISTANCE ==========
+    float distance = sqrtf(delta_x * delta_x + delta_y * delta_y);
+
+    // ========== FOV CHECK ==========
+    if (distance > vars::triggerbot::fov)
+    {
+        trigger_waiting = false;
+        return;
+    }
+
+    // ========== TEAMMATE CHECK ==========
+    if (vars::triggerbot::ignore_teammates)
+    {
+        uintptr_t player = 0; // We need to get player from model
+        // Model is the character, we need to check team
+        // Skip this check if we can't verify (already filtered in aimbot)
+    }
+
+    // ========== VISIBILITY CHECK ==========
+    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+    uintptr_t camera = core.find_first_child_class(workspace, "Camera");
+
+    if (camera)
+    {
+        // Get multiple body parts for better visibility check
+        vector w_player_root = memory->read<vector>(p_player_root + offsets::Position);
+        vector w_head = w_target_bone_pos;
+        vector w_torso = w_player_root;
+        vector w_pelvis = w_player_root;
+        vector w_left_foot = w_player_root;
+        vector w_right_foot = w_player_root;
+
+        // Try to get actual body part positions
+        auto torso_part = core.find_first_child(model, "Torso");
+        if (!torso_part) torso_part = core.find_first_child(model, "UpperTorso");
+        if (torso_part)
+        {
+            auto p_torso = memory->read<uintptr_t>(torso_part + offsets::Primitive);
+            if (p_torso) w_torso = memory->read<vector>(p_torso + offsets::Position);
+        }
+
+        auto left_leg = core.find_first_child(model, "Left Leg");
+        if (!left_leg) left_leg = core.find_first_child(model, "LeftFoot");
+        if (left_leg)
+        {
+            auto p_left = memory->read<uintptr_t>(left_leg + offsets::Primitive);
+            if (p_left) w_left_foot = memory->read<vector>(p_left + offsets::Position);
+        }
+
+        auto right_leg = core.find_first_child(model, "Right Leg");
+        if (!right_leg) right_leg = core.find_first_child(model, "RightFoot");
+        if (right_leg)
+        {
+            auto p_right = memory->read<uintptr_t>(right_leg + offsets::Primitive);
+            if (p_right) w_right_foot = memory->read<vector>(p_right + offsets::Position);
+        }
+
+        // Check if ANY part is visible
+        bool visible = is_visible(cam_pos, w_head, w_torso, w_pelvis, w_left_foot, w_right_foot, model);
+
+        if (!visible)
+        {
+            trigger_waiting = false;
+            return;
+        }
+    }
+
+    // ========== DELAY TIMER ==========
+    if (!trigger_waiting)
+    {
+        trigger_fire_time = now + std::chrono::milliseconds(vars::triggerbot::delay);
+        trigger_waiting = true;
+        return;
+    }
+
+    // ========== WAIT FOR DELAY ==========
+    if (now < trigger_fire_time)
+        return;
+
+    // ========== HIT CHANCE CHECK ==========
+    if (vars::triggerbot::hit_chance_enabled)
+    {
+        int random = rand() % 100;
+        if (random > vars::triggerbot::hit_chance)
+        {
+            trigger_waiting = false;
+            return;
+        }
+    }
+
+    // ========== RATE LIMIT (prevent spam) ==========
+    auto time_since_last = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_fire_time).count();
+    if (time_since_last < 50) // Minimum 50ms between shots
+        return;
+
+    // ========== FIRE! ==========
+    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+    trigger_mouse_down = true;
+    trigger_release_time = now + std::chrono::milliseconds(vars::triggerbot::hold_time);
+    last_fire_time = now;
+    trigger_waiting = false;
+}
+
+void c_esp::reset_aim_state()
+{
+    this->leftover_x = 0.0f;
+    this->leftover_y = 0.0f;
+    this->smoothed_delta_x = 0.0f;
+    this->smoothed_delta_y = 0.0f;
 }
 
 void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
