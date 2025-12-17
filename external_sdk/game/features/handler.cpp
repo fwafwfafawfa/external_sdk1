@@ -17,12 +17,8 @@ void c_feature_handler::start(uintptr_t datamodel)
     std::chrono::duration<float> dt = now - last_time;
     last_time = now;
 
-    if (!g_main::datamodel || !g_main::localplayer) {
-        reinitialize_game_pointers();
-        if (!g_main::datamodel || !g_main::localplayer) {
-            return;
-        }
-    }
+    if (!g_main::datamodel || !g_main::localplayer)
+        return;
 
     if (!datamodel && !g_main::v_engine)
         return;
@@ -42,25 +38,20 @@ void c_feature_handler::start(uintptr_t datamodel)
     speed_hack::run();
 
     freecam.enabled = vars::freecam::toggled;
-    {
-        freecam.run(dt.count());
-    }
+    freecam.run(dt.count());
 
     jump_power::run();
     infinite_jump::run();
     airswim.run();
 
-    if (vars::fly::toggled) {
+    if (vars::fly::toggled)
         fly.run();
-    }
 
-    if (vars::set_fov::unlock_zoom) {
+    if (vars::set_fov::unlock_zoom)
         freecam.unlock_zoom();
-    }
 
-    if (vars::set_fov::toggled) {
+    if (vars::set_fov::toggled)
         freecam.set_fov(vars::set_fov::set_fov);
-    }
 
     misc.run_anti_afk();
 }

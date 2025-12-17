@@ -41,9 +41,10 @@ public:
     static std::mutex tracking_mtx;
     static void hitbox_expander_thread();
     static void start_hitbox_thread();
-    static int hitbox_processed_count;  // PUBLIC
+    static int hitbox_processed_count;
     static void apply_hitbox_expander();
     static std::mutex players_mtx;
+
     const char* get_target_bone_name(uintptr_t model, uintptr_t player);
     const char* get_closest_part_name(uintptr_t model);
     const char* get_random_part_name();
@@ -52,19 +53,18 @@ public:
     void perform_aim(float delta_x, float delta_y, float target_x, float target_y);
     void run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta_x, float delta_y, vector cam_pos, vector w_target_bone_pos);
     void reset_aim_state();
-
     void update_world_cache();
     void calculate_fps();
     void run_players(view_matrix_t viewmatrix);
     void run_aimbot(view_matrix_t viewmatrix);
     void draw_hitbox_esp(view_matrix_t viewmatrix);
     void draw_minimap(view_matrix_t viewmatrix);
+
     bool is_visible(const vector& from, const vector& to, uintptr_t target_model);
     bool is_visible(const vector& from, const vector& head, const vector& torso, const vector& pelvis, const vector& left_foot, const vector& right_foot, uintptr_t target_model);
 
 private:
     static std::atomic<bool> hitbox_thread_running;
-
 };
 
 inline c_esp esp;

@@ -7,41 +7,57 @@
 class c_tp_handler {
 private:
     std::atomic<bool> running = false;
-    std::atomic<bool> needs_reinit = false;
     std::thread monitor_thread;
 
     uint64_t last_place_id = 0;
-    uintptr_t last_datamodel = 0;
+    uint64_t last_game_id = 0;
+    uintptr_t last_base_address = 0;
 
 public:
-    // Quick check if we need to reinitialize
     bool should_reinitialize() {
-        // No datamodel = need init
-        if (g_main::datamodel == 0) return true;
+        if (!memory) return true;
 
-        // Can't read from datamodel = need init
-        uintptr_t test = memory->read<uintptr_t>(g_main::datamodel);
-        if (test == 0) return true;
+        auto base = memory->find_image();
+        if (!base) return true;
 
-        // Place ID changed = need init (teleported to different game)
-        uint64_t current_place = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
-        if (current_place != last_place_id && last_place_id != 0) {
-            util.m_print("tp_handler: Place changed (%llu -> %llu)", last_place_id, current_place);
+        if (last_base_address != 0 && base != last_base_address) {
+            util.m_print("tp_handler: Base address changed (0x%llX -> 0x%llX)", last_base_address, base);
             return true;
         }
 
-        // LocalPlayer invalid = need init
+        if (g_main::datamodel == 0) return true;
+
+        uintptr_t test = memory->read<uintptr_t>(g_main::datamodel);
+        if (test == 0 || test < 0x10000) return true;
+
+        uint64_t current_place = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
+        uint64_t current_game = memory->read<uint64_t>(g_main::datamodel + offsets::GameId);
+
+        if (current_place != last_place_id && last_place_id != 0) {
+            util.m_print("tp_handler: Teleported (%llu -> %llu)", last_place_id, current_place);
+            return true;
+        }
+
+        if (current_game != last_game_id && last_game_id != 0) {
+            util.m_print("tp_handler: Game changed (%llu -> %llu)", last_game_id, current_game);
+            return true;
+        }
+
         if (g_main::localplayer == 0) return true;
         uintptr_t test_lp = memory->read<uintptr_t>(g_main::localplayer);
-        if (test_lp == 0) return true;
+        if (test_lp == 0 || test_lp < 0x10000) return true;
 
         return false;
     }
 
     void update_cache() {
+        if (memory) {
+            last_base_address = memory->find_image();
+        }
+
         if (g_main::datamodel != 0) {
-            last_datamodel = g_main::datamodel;
             last_place_id = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
+            last_game_id = memory->read<uint64_t>(g_main::datamodel + offsets::GameId);
         }
     }
 
@@ -49,45 +65,53 @@ public:
         util.m_print("tp_handler: Monitor started");
 
         while (running) {
-            // Sleep longer when game is active and working
-            // Sleep shorter when waiting for game
-            int sleep_time = (g_main::datamodel != 0) ? 2000 : 500;
-            std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
             if (!memory) continue;
 
-            // Check if game process exists
             auto base = memory->find_image();
             if (!base) {
                 if (g_main::datamodel != 0) {
-                    util.m_print("tp_handler: Game closed");
+                    util.m_print("tp_handler: Game closed, waiting for restart...");
                     g_main::datamodel = 0;
                     g_main::v_engine = 0;
                     g_main::localplayer = 0;
                     g_main::localplayer_team = 0;
-                    last_datamodel = 0;
                     last_place_id = 0;
+                    last_game_id = 0;
+                    last_base_address = 0;
                 }
-                continue;
+
+                delete memory;
+                memory = new c_memory("RobloxPlayerBeta.exe");
+                if (!memory || !memory->find_image()) {
+                    continue;
+                }
+
+                util.m_print("tp_handler: Detected new Roblox process");
             }
 
-            // Only check if reinit needed
-            if (should_reinitialize()) {
-                util.m_print("tp_handler: Reinitializing...");
-                std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // Wait for game to load
+            if (g_main::datamodel == 0 || should_reinitialize()) {
+                util.m_print("tp_handler: Detected change, reinitializing...");
+                std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+
                 reinitialize_game_pointers();
-                update_cache();
+
+                if (g_main::datamodel != 0) {
+                    update_cache();
+                    util.m_print("tp_handler: Reinitialized successfully");
+                }
             }
         }
 
         util.m_print("tp_handler: Monitor stopped");
     }
 
+
     void start() {
         if (running) return;
         running = true;
 
-        // Initial setup
         reinitialize_game_pointers();
         update_cache();
 
@@ -107,7 +131,7 @@ public:
     }
 
     bool is_ready() const {
-        return g_main::datamodel != 0 && g_main::localplayer != 0;
+        return g_main::datamodel != 0 && g_main::localplayer != 0 && memory && memory->find_image() != 0;
     }
 };
 

@@ -20,9 +20,10 @@ void reinitialize_game_pointers()
         uintptr_t v_engine = memory->read<uintptr_t>(base_address + offsets::VisualEnginePointer);
         uintptr_t players_instance = datamodel ? core.find_first_child_class(datamodel, "Players") : 0;
         uintptr_t localplayer = players_instance ? memory->read<uintptr_t>(players_instance + offsets::LocalPlayer) : 0;
-        uintptr_t localplayer_team = localplayer ? memory->read<uintptr_t>(localplayer + offsets::Team) : 0;
 
-        if (datamodel && v_engine && players_instance && localplayer && localplayer_team) {
+        if (datamodel && v_engine && players_instance && localplayer) {
+            uintptr_t localplayer_team = memory->read<uintptr_t>(localplayer + offsets::Team);
+
             g_main::datamodel = datamodel;
             g_main::v_engine = v_engine;
             g_main::localplayer = localplayer;
@@ -31,7 +32,7 @@ void reinitialize_game_pointers()
             util.m_print("reinitialize_game_pointers: Success on attempt %d", attempt);
             util.m_print("Base: 0x%llX FakeDataModel: 0x%llX Datamodel: 0x%llX VisualEngine: 0x%llX Players: 0x%llX LocalPlayer: 0x%llX Team: 0x%llX",
                 base_address, fake_datamodel_pointer, datamodel, v_engine, players_instance, localplayer, localplayer_team);
-            auto place_id = memory->read<uintptr_t>(g_main::datamodel + offsets::PlaceId);
+            auto place_id = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
             util.m_print("reinitialize_game_pointers: Place ID: %llu", place_id);
             return;
         }
@@ -40,7 +41,7 @@ void reinitialize_game_pointers()
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    util.m_print("reinitialize_game_pointers: Failed after %d attempts.", max_attempts);
+    util.m_print("reinitialize_game_pointers: Failed after %d attempts.");
 }
 
 int main()

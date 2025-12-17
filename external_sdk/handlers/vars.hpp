@@ -32,12 +32,19 @@ namespace vars
         inline bool hide_teammates = true;
         inline bool show_fps = true;
         inline bool show_weapon = true;
+        inline bool chams_enabled = false;
+        inline bool chams_visible_only = false;
+        inline bool chams_enemies_only = true;
+        inline float chams_transparency = 0.5f;
+        inline float chams_opacity = 0.5f;
 
         inline ImColor esp_box_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_name_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_distance_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_skeleton_color = ImColor(255, 0, 0, 255);
         inline ImColor esp_tracer_color = ImColor(255, 255, 255, 255);
+        inline ImColor chams_visible_color = ImColor(0, 255, 0, 255);
+        inline ImColor chams_invisible_color = ImColor(255, 0, 0, 255);
     }
 
     namespace triggerbot
