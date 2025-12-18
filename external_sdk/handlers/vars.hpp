@@ -199,6 +199,9 @@ namespace vars
         inline bool hive_claimed = false;        // Already got hive
         inline float hive_wait_time = 3.0f;      // Seconds to wait at hive
         inline float post_hop_delay = 11.0f;
+        extern float stored_vicious_x;
+        extern float stored_vicious_y;
+        extern float stored_vicious_z;
     }
 
     namespace anti_afk

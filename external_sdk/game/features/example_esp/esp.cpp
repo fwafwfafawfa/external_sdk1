@@ -25,6 +25,9 @@ std::mutex c_esp::vis_cache_mtx;
 std::unordered_map<uintptr_t, TargetData> c_esp::target_tracking;
 std::mutex c_esp::tracking_mtx;
 std::mutex c_esp::players_mtx;
+float vars::bss::stored_vicious_x = 0.0f;
+float vars::bss::stored_vicious_y = 0.0f;
+float vars::bss::stored_vicious_z = 0.0f;
 
 
 std::atomic<bool> c_esp::hitbox_thread_running{ false };
@@ -1442,34 +1445,26 @@ void c_esp::server_hop()
 {
     util.m_print("[Server Hop] Starting...");
 
-    // STOP ALL MEMORY ACCESS
     g_safe_mode = true;
 
-    // Stop features
     vars::bss::is_hopping = true;
     vars::bss::is_floating = false;
     vars::bss::going_to_hive = false;
     vars::bss::hive_claimed = false;
 
-    // Clear pointers
     g_main::datamodel = 0;
     g_main::localplayer = 0;
     g_main::v_engine = 0;
 
-    // Tell handler
     tp_handler.request_rescan();
 
-    // Wait for render loop to finish
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    // Kill Roblox
     util.m_print("[Server Hop] Killing Roblox...");
     system("taskkill /F /IM RobloxPlayerBeta.exe >nul 2>&1");
 
-    // Do the wait and reopen in a separate thread
     std::thread([]()
         {
-            // Wait for BSS to save data
             float wait_time = vars::bss::post_hop_delay;
             util.m_print("[Server Hop] Waiting %.0f seconds for BSS to save...", wait_time);
 
@@ -1479,27 +1474,25 @@ void c_esp::server_hop()
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             }
 
-            // Open new game
             util.m_print("[Server Hop] Opening new game...");
             system("start roblox://placeId=1537690962");
 
         }).detach();
 }
+
 void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
 {
     if (!g_main::datamodel || !g_main::localplayer) return;
     if (!vars::bss::vicious_esp) return;
-    if (vars::bss::is_hopping) return;  // ADD THIS
-    if (!tp_handler.is_ready()) return;  // ADD THIS
+    if (vars::bss::is_hopping) return;
+    if (!tp_handler.is_ready()) return;
 
-    // Get Workspace.Monsters
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     if (!workspace) return;
 
     uintptr_t monsters = core.find_first_child(workspace, "Monsters");
     if (!monsters) return;
 
-    // Get local player position for distance
     vector local_pos = { 0, 0, 0 };
     uintptr_t local_character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
     if (local_character)
@@ -1513,7 +1506,6 @@ void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
         }
     }
 
-    // Loop through all monsters
     std::vector<uintptr_t> monster_children = core.children(monsters);
 
     for (uintptr_t monster : monster_children)
@@ -1522,15 +1514,12 @@ void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
 
         std::string name = core.get_instance_name(monster);
 
-        // Check if Vicious Bee
         if (name.find("Vicious") == std::string::npos) continue;
 
-        // Get position - try HumanoidRootPart first, then PrimaryPart, then any part
         uintptr_t part = core.find_first_child(monster, "HumanoidRootPart");
         if (!part) part = core.find_first_child(monster, "Torso");
         if (!part) part = core.find_first_child(monster, "Head");
 
-        // If still no part, search for any BasePart
         if (!part)
         {
             std::vector<uintptr_t> monster_parts = core.children(monster);
@@ -1555,27 +1544,23 @@ void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
 
         if (!core.world_to_screen(world_pos, screen_pos, viewmatrix)) continue;
 
-        // Calculate distance
         float distance = sqrtf(
             powf(world_pos.x - local_pos.x, 2) +
             powf(world_pos.y - local_pos.y, 2) +
             powf(world_pos.z - local_pos.z, 2)
         );
 
-        // Draw ESP
         std::stringstream ss;
         ss << "VICIOUS BEE [" << std::fixed << std::setprecision(0) << distance << "m]";
 
-        // Red text with black outline
         draw.outlined_string(
             ImVec2(screen_pos.x, screen_pos.y),
             ss.str().c_str(),
-            ImColor(255, 0, 0, 255),      // Red
-            ImColor(0, 0, 0, 255),         // Black outline
-            true                            // Centered
+            ImColor(255, 0, 0, 255),
+            ImColor(0, 0, 0, 255),
+            true
         );
 
-        // Tracer line from bottom of screen
         int screen_width = core.get_screen_width();
         int screen_height = core.get_screen_height();
 
@@ -1583,7 +1568,7 @@ void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
             ImVec2(screen_width * 0.5f, screen_height),
             ImVec2(screen_pos.x, screen_pos.y),
             ImColor(255, 0, 0, 255),
-            2.0f  // Thicker line for visibility
+            2.0f
         );
     }
 }
@@ -1600,7 +1585,6 @@ void c_esp::run_vicious_hunter()
     static bool timer_started = false;
     static bool just_hopped = false;
 
-    // Timer logic for join delay
     if (!timer_started)
     {
         join_time = std::chrono::steady_clock::now();
@@ -1685,7 +1669,7 @@ void c_esp::run_vicious_hunter()
                 {
                     vector vpos = memory->read<vector>(prim + offsets::Position);
                     vicious_x = vpos.x;
-                    vicious_y = vpos.y + 50.0f; // Fly high above
+                    vicious_y = vpos.y + 50.0f;
                     vicious_z = vpos.z;
                     has_vicious_pos = true;
                 }
@@ -1702,6 +1686,9 @@ void c_esp::run_vicious_hunter()
                     vars::bss::target_z = hive_z;
                     vars::bss::going_to_hive = true;
                     vars::bss::is_floating = true;
+                    vars::bss::stored_vicious_x = vicious_x;
+                    vars::bss::stored_vicious_y = vicious_y;
+                    vars::bss::stored_vicious_z = vicious_z;
                 }
                 else
                 {
@@ -1734,7 +1721,7 @@ void c_esp::run_vicious_hunter()
         util.m_print("[Vicious Hunter] Not found. Hopping... (Server #%d)", vars::bss::servers_checked);
         server_hop();
     }
-}   
+}
 
 void c_esp::float_to_target()
 {
@@ -1759,6 +1746,18 @@ void c_esp::float_to_target()
     uintptr_t local_primitive = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
     if (!local_primitive) return;
 
+    // Apply noclip every frame to all character parts
+    std::vector<uintptr_t> children = core.children(local_character);
+    for (auto child : children) {
+        std::string className = core.get_instance_classname(child);
+        if (className.find("Part") != std::string::npos || className.find("Mesh") != std::string::npos) {
+            uintptr_t prim = memory->read<uintptr_t>(child + offsets::Primitive);
+            if (prim) {
+                memory->write<bool>(prim + offsets::CanCollide, false);
+            }
+        }
+    }
+
     vector current_pos = memory->read<vector>(local_primitive + offsets::Position);
 
     float dx = vars::bss::target_x - current_pos.x;
@@ -1774,13 +1773,13 @@ void c_esp::float_to_target()
         {
             util.m_print("[Vicious Hunter] At hive! Pressing E to claim...");
 
-            // Simulate pressing E multiple times to claim hive
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+            // Hold E for longer duration
             for (int i = 0; i < 5; i++)
             {
-                // Press E
                 keybd_event('E', 0, 0, 0);
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                // Release E
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // Hold 1 second
                 keybd_event('E', 0, KEYEVENTF_KEYUP, 0);
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
             }
@@ -1791,48 +1790,11 @@ void c_esp::float_to_target()
             vars::bss::hive_claimed = true;
             vars::bss::going_to_hive = false;
 
-            // Now go to Vicious
-            uintptr_t monsters = core.find_first_child(workspace, "Monsters");
-            if (monsters)
-            {
-                std::vector<uintptr_t> monster_children = core.children(monsters);
-                for (uintptr_t monster : monster_children)
-                {
-                    if (!monster) continue;
-                    std::string name = core.get_instance_name(monster);
-                    if (name.find("Vicious") != std::string::npos)
-                    {
-                        uintptr_t vicious_part = core.find_first_child(monster, "HumanoidRootPart");
-                        if (!vicious_part)
-                        {
-                            std::vector<uintptr_t> parts = core.children(monster);
-                            for (uintptr_t p : parts)
-                            {
-                                if (core.get_instance_classname(p).find("Part") != std::string::npos)
-                                {
-                                    vicious_part = p;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (vicious_part)
-                        {
-                            uintptr_t prim = memory->read<uintptr_t>(vicious_part + offsets::Primitive);
-                            if (prim)
-                            {
-                                vector vpos = memory->read<vector>(prim + offsets::Position);
-                                vars::bss::target_x = vpos.x;
-                                vars::bss::target_y = vpos.y + 5.0f;
-                                vars::bss::target_z = vpos.z;
-                                util.m_print("[Vicious Hunter] Going to Vicious!");
-                                return;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
+            util.m_print("[Vicious Hunter] Going to Vicious!");
+            vars::bss::target_x = vars::bss::stored_vicious_x;
+            vars::bss::target_y = vars::bss::stored_vicious_y;
+            vars::bss::target_z = vars::bss::stored_vicious_z;
+            return;
         }
 
         vars::bss::is_floating = false;
@@ -1840,7 +1802,6 @@ void c_esp::float_to_target()
         return;
     }
 
-    // Move towards target
     float nx = dx / distance;
     float ny = dy / distance;
     float nz = dz / distance;
@@ -1851,7 +1812,6 @@ void c_esp::float_to_target()
     velocity.z = nz * vars::bss::float_speed;
 
     memory->write<vector>(local_primitive + offsets::Velocity, velocity);
-    memory->write<bool>(local_primitive + offsets::CanCollide, false);
 }
 
 bool c_esp::find_hive_position(float& out_x, float& out_y, float& out_z)
@@ -1867,71 +1827,119 @@ bool c_esp::find_hive_position(float& out_x, float& out_y, float& out_z)
     std::string player_name = core.get_instance_name(g_main::localplayer);
     util.m_print("[Hive] Looking for hive. Player: %s", player_name.c_str());
 
+    uintptr_t best_hive = 0;
+    int best_hive_num = -1;
+
     for (int i = 1; i <= 6; i++)
     {
         std::string hive_name = "Hive" + std::to_string(i);
         uintptr_t hive = core.find_first_child(honeycombs, hive_name);
         if (!hive) continue;
 
-        // Navigate: Hive -> Display -> Gui -> Frame -> OwnerName
-        uintptr_t display = core.find_first_child(hive, "Display");
-        if (!display) continue;
+        bool is_available = false;
+        int total_slots_with_bees = 0;
 
-        uintptr_t gui = core.find_first_child(display, "Gui");
-        if (!gui) continue;
-
-        uintptr_t frame = core.find_first_child(gui, "Frame");
-        if (!frame) continue;
-
-        uintptr_t owner_label = core.find_first_child(frame, "OwnerName");
-        if (!owner_label) continue;
-
-        // Read TextLabel.Text using the offset
-        uintptr_t text_ptr = memory->read<uintptr_t>(owner_label + offsets::TextLabelText);
-        std::string owner_text = "";
-
-        if (text_ptr && text_ptr > 0x10000)
+        // Check bee slots by looking for LevelPart in each slot model
+        for (int row = 1; row <= 5; row++)
         {
-            owner_text = core.length_read_string(text_ptr);
+            for (int col = 1; col <= 10; col++)
+            {
+                std::string slot_name = std::to_string(row) + "." + std::to_string(col);
+                uintptr_t slot = core.find_first_child(hive, slot_name);
+
+                if (slot)
+                {
+                    // Check if this slot has a LevelPart (indicates a bee is present)
+                    uintptr_t level_part = core.find_first_child(slot, "LevelPart");
+                    if (level_part)
+                    {
+                        total_slots_with_bees++;
+                    }
+                }
+            }
         }
 
-        util.m_print("[Hive] %s owner: '%s'", hive_name.c_str(), owner_text.c_str());
+        util.m_print("[Hive] %s has %d slots with bees", hive_name.c_str(), total_slots_with_bees);
 
-        // Check if empty or belongs to us
-        bool is_available = owner_text.empty() || owner_text == player_name;
-
-        if (is_available)
+        // If no bees in any slots, hive is unclaimed/available
+        if (total_slots_with_bees == 0)
         {
-            util.m_print("[Hive] %s is AVAILABLE!", hive_name.c_str());
+            is_available = true;
+            util.m_print("[Hive] %s is UNCLAIMED (no bees)", hive_name.c_str());
+        }
 
-            // Get position from HivePlatforms
-            uintptr_t hive_platforms = core.find_first_child(workspace, "HivePlatforms");
-            if (hive_platforms)
+        // Try TextLabel method to see if it's OUR hive
+        uintptr_t display = core.find_first_child(hive, "Display");
+        if (display)
+        {
+            uintptr_t gui = core.find_first_child(display, "Gui");
+            if (gui)
             {
-                std::vector<uintptr_t> platforms = core.children(hive_platforms);
-                if (platforms.size() >= (size_t)i)
+                uintptr_t frame = core.find_first_child(gui, "Frame");
+                if (frame)
                 {
-                    uintptr_t platform = platforms[i - 1];
-
-                    // Platform is a Model, find a Part inside it
-                    std::vector<uintptr_t> platform_children = core.children(platform);
-                    for (uintptr_t child : platform_children)
+                    uintptr_t owner_label = core.find_first_child(frame, "OwnerName");
+                    if (owner_label)
                     {
-                        std::string class_name = core.get_instance_classname(child);
-                        if (class_name.find("Part") != std::string::npos ||
-                            class_name.find("Union") != std::string::npos ||
-                            class_name.find("Mesh") != std::string::npos)
+                        uintptr_t text_ptr = memory->read<uintptr_t>(owner_label + offsets::TextLabelText);
+                        std::string owner_text = "";
+
+                        if (text_ptr && text_ptr > 0x10000)
                         {
-                            uintptr_t primitive = memory->read<uintptr_t>(child + offsets::Primitive);
-                            if (primitive)
-                            {
-                                vector pos = memory->read<vector>(primitive + offsets::Position);
-                                out_x = pos.x;
-                                out_y = pos.y + 10.0f;
-                                out_z = pos.z;
-                                util.m_print("[Hive] Position: %.1f, %.1f, %.1f", out_x, out_y, out_z);
-                                return true;
-                            }
+                            owner_text = core.length_read_string(text_ptr);
+                        }
+
+                        util.m_print("[Hive] %s OwnerName: '%s'", hive_name.c_str(), owner_text.c_str());
+
+                        // If this is OUR hive, prioritize it
+                        if (!owner_text.empty() && owner_text == player_name && total_slots_with_bees > 0)
+                        {
+                            util.m_print("[Hive] %s is YOUR hive!", hive_name.c_str());
+                            best_hive = hive;
+                            best_hive_num = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Save first available hive as fallback
+        if (is_available && best_hive == 0)
+        {
+            best_hive = hive;
+            best_hive_num = i;
+        }
+    }
+
+    // If we found a hive (either ours or available), get its position
+    if (best_hive != 0 && best_hive_num != -1)
+    {
+        uintptr_t hive_platforms = core.find_first_child(workspace, "HivePlatforms");
+        if (hive_platforms)
+        {
+            std::vector<uintptr_t> platforms = core.children(hive_platforms);
+            if (platforms.size() >= (size_t)best_hive_num)
+            {
+                uintptr_t platform = platforms[best_hive_num - 1];
+
+                std::vector<uintptr_t> platform_children = core.children(platform);
+                for (uintptr_t child : platform_children)
+                {
+                    std::string class_name = core.get_instance_classname(child);
+                    if (class_name.find("Part") != std::string::npos ||
+                        class_name.find("Union") != std::string::npos ||
+                        class_name.find("Mesh") != std::string::npos)
+                    {
+                        uintptr_t primitive = memory->read<uintptr_t>(child + offsets::Primitive);
+                        if (primitive)
+                        {
+                            vector pos = memory->read<vector>(primitive + offsets::Position);
+                            out_x = pos.x;
+                            out_y = pos.y + 10.0f;
+                            out_z = pos.z;
+                            util.m_print("[Hive] Hive%d Position: %.1f, %.1f, %.1f", best_hive_num, out_x, out_y, out_z);
+                            return true;
                         }
                     }
                 }

@@ -95,7 +95,7 @@ public:
                     }
 
                     util.m_print("tp_handler: [HOP] New window found! Waiting for game to load...");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(15000));  // 15 seconds for BSS
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10000));  // 15 seconds for BSS
 
                     is_hopping = false;
                     force_rescan_flag = true;
