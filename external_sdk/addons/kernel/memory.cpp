@@ -1,9 +1,24 @@
 #include "memory.hpp"
 
 c_memory::c_memory(const char* process_name) {
-    process_id = find_process(process_name);
-    if (process_id) {
-        process_handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, process_id);
+    process_handle = NULL;
+    process_id = 0;
+
+    // Try multiple times to find the process
+    for (int i = 0; i < 10; i++) {
+        process_id = find_process(process_name);
+        if (process_id) {
+            process_handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, process_id);
+            if (process_handle && process_handle != INVALID_HANDLE_VALUE) {
+                // Verify we can actually read from it
+                if (find_image() != 0) {
+                    return; // Success!
+                }
+                CloseHandle(process_handle);
+                process_handle = NULL;
+            }
+        }
+        Sleep(1000); // Wait 1 second and retry
     }
 }
 

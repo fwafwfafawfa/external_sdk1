@@ -8,18 +8,42 @@ void reinitialize_game_pointers()
 
     const int max_attempts = 10;
     for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+
+        if (!memory) {
+            util.m_print("reinitialize_game_pointers: No memory object!");
+            return;
+        }
+
         auto base_address = memory->find_image();
         if (!base_address) {
-            util.m_print("reinitialize_game_pointers: Attempt %d: no base address, retrying...", attempt);
+            util.m_print("reinitialize_game_pointers: Attempt %d: no base address", attempt);
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
         uintptr_t fake_datamodel_pointer = memory->read<uintptr_t>(base_address + offsets::FakeDataModelPointer);
-        uintptr_t datamodel = fake_datamodel_pointer ? memory->read<uintptr_t>(fake_datamodel_pointer + offsets::FakeDataModelToDataModel) : 0;
+        util.m_print("  FakeDataModel: 0x%llX", fake_datamodel_pointer);
+
+        uintptr_t datamodel = 0;
+        if (fake_datamodel_pointer) {
+            datamodel = memory->read<uintptr_t>(fake_datamodel_pointer + offsets::FakeDataModelToDataModel);
+        }
+        util.m_print("  DataModel: 0x%llX", datamodel);
+
         uintptr_t v_engine = memory->read<uintptr_t>(base_address + offsets::VisualEnginePointer);
-        uintptr_t players_instance = datamodel ? core.find_first_child_class(datamodel, "Players") : 0;
-        uintptr_t localplayer = players_instance ? memory->read<uintptr_t>(players_instance + offsets::LocalPlayer) : 0;
+        util.m_print("  VisualEngine: 0x%llX", v_engine);
+
+        uintptr_t players_instance = 0;
+        if (datamodel) {
+            players_instance = core.find_first_child_class(datamodel, "Players");
+        }
+        util.m_print("  Players: 0x%llX", players_instance);
+
+        uintptr_t localplayer = 0;
+        if (players_instance) {
+            localplayer = memory->read<uintptr_t>(players_instance + offsets::LocalPlayer);
+        }
+        util.m_print("  LocalPlayer: 0x%llX", localplayer);
 
         if (datamodel && v_engine && players_instance && localplayer) {
             uintptr_t localplayer_team = memory->read<uintptr_t>(localplayer + offsets::Team);
@@ -29,19 +53,15 @@ void reinitialize_game_pointers()
             g_main::localplayer = localplayer;
             g_main::localplayer_team = localplayer_team;
 
-            util.m_print("reinitialize_game_pointers: Success on attempt %d", attempt);
-            util.m_print("Base: 0x%llX FakeDataModel: 0x%llX Datamodel: 0x%llX VisualEngine: 0x%llX Players: 0x%llX LocalPlayer: 0x%llX Team: 0x%llX",
-                base_address, fake_datamodel_pointer, datamodel, v_engine, players_instance, localplayer, localplayer_team);
-            auto place_id = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
-            util.m_print("reinitialize_game_pointers: Place ID: %llu", place_id);
+            util.m_print("reinitialize_game_pointers: SUCCESS on attempt %d", attempt);
             return;
         }
 
-        util.m_print("reinitialize_game_pointers: Attempt %d: incomplete, retrying...", attempt);
+        util.m_print("reinitialize_game_pointers: Attempt %d: incomplete", attempt);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    util.m_print("reinitialize_game_pointers: Failed after %d attempts.");
+    util.m_print("reinitialize_game_pointers: Failed after %d attempts", max_attempts);
 }
 
 int main()

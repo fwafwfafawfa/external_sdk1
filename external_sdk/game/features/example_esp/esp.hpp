@@ -67,6 +67,7 @@ public:
 
     bool is_visible(const vector& from, const vector& to, uintptr_t target_model);
     bool is_visible(const vector& from, const vector& head, const vector& torso, const vector& pelvis, const vector& left_foot, const vector& right_foot, uintptr_t target_model);
+    bool find_hive_position(float& out_x, float& out_y, float& out_z);
 
 private:
     static std::atomic<bool> hitbox_thread_running;

@@ -194,6 +194,11 @@ namespace vars
         
         inline bool webhook_enabled = false;
         inline std::string webhook_url = "";
+        inline bool need_hive_first = true;      // Enable going to hive first
+        inline bool going_to_hive = false;       // Currently going to hive
+        inline bool hive_claimed = false;        // Already got hive
+        inline float hive_wait_time = 3.0f;      // Seconds to wait at hive
+        inline float post_hop_delay = 11.0f;
     }
 
     namespace anti_afk

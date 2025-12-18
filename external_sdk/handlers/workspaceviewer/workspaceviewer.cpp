@@ -1,4 +1,3 @@
-// workspaceviewer.cpp
 #include "workspaceviewer.hpp"
 #include <cmath>
 #include "../misc/misc.hpp"
@@ -49,15 +48,13 @@ void c_workspace_viewer::draw_selected_instance_highlight() {
     vector2d screen_pos;
     view_matrix_t view_matrix;
 
-    uintptr_t camera_obj = 0;
-
     uintptr_t local_player_obj = g_main::localplayer;
     if (!local_player_obj) return;
 
     uintptr_t player_mouse = memory->read<uintptr_t>(local_player_obj + offsets::PlayerMouse);
     if (!player_mouse) return;
 
-    camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Camera);
+    uintptr_t camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Camera);
     if (!camera_obj) return;
 
     view_matrix = memory->read<view_matrix_t>(g_main::v_engine + offsets::viewmatrix);
@@ -103,9 +100,8 @@ std::string c_workspace_viewer::dump_script_to_string(uintptr_t script_instance,
     return debug;
 }
 
-
 void c_workspace_viewer::draw_properties() {
-    ImGui::BeginChild("Properties", ImVec2(0, 0), true);
+    ImGui::BeginChild("Properties", ImVec2(0, 0), ImGuiChildFlags_Borders);
     ImGui::Text("Properties");
     ImGui::Separator();
 
@@ -144,32 +140,26 @@ void c_workspace_viewer::draw_properties() {
     if (class_name == "Player") {
         ImGui::Separator();
         if (ImGui::Button("Teleport to Player")) {
-            util.m_print("Teleport: Calling misc.teleport_to for player: 0x%llX", selected_instance);
             misc.teleport_to(selected_instance);
         }
     }
     else if (class_name.find("Part") != std::string::npos || class_name.find("Model") != std::string::npos) {
         ImGui::Separator();
         if (ImGui::Button("Teleport to")) {
-            util.m_print("Teleport: Button clicked. Selected instance: 0x%llX", selected_instance);
-
             uintptr_t local_player_character_model_temp = core.find_first_child(core.find_first_child_class(g_main::datamodel, "Workspace"), core.get_instance_name(g_main::localplayer));
             if (!local_player_character_model_temp) {
-                util.m_print("Teleport: Could not teleport: Local player character model not found.");
                 ImGui::EndChild();
                 return;
             }
 
             uintptr_t hrp_temp = core.find_first_child(local_player_character_model_temp, "HumanoidRootPart");
             if (!hrp_temp) {
-                util.m_print("Teleport: Could not teleport: Local HumanoidRootPart not found.");
                 ImGui::EndChild();
                 return;
             }
 
             uintptr_t p_local_root = memory->read<uintptr_t>(hrp_temp + offsets::Primitive);
             if (!p_local_root) {
-                util.m_print("Teleport: Could not teleport: Local HumanoidRootPart Primitive not found.");
                 ImGui::EndChild();
                 return;
             }
@@ -180,17 +170,11 @@ void c_workspace_viewer::draw_properties() {
             std::string target_class_name = core.get_instance_classname(selected_instance);
 
             if (target_class_name.find("Model") != std::string::npos) {
-                uintptr_t primary_part = 0;
-
-                uintptr_t hrp_in_model = core.find_first_child(selected_instance, "HumanoidRootPart");
-                if (hrp_in_model) {
-                    primary_part = hrp_in_model;
-                }
-                else {
+                uintptr_t primary_part = core.find_first_child(selected_instance, "HumanoidRootPart");
+                if (!primary_part) {
                     std::vector<uintptr_t> children = core.children(selected_instance);
                     for (uintptr_t child : children) {
-                        std::string child_class_name = core.get_instance_classname(child);
-                        if (child_class_name.find("Part") != std::string::npos) {
+                        if (core.get_instance_classname(child).find("Part") != std::string::npos) {
                             primary_part = child;
                             break;
                         }
@@ -198,37 +182,25 @@ void c_workspace_viewer::draw_properties() {
                 }
 
                 if (primary_part) {
-                    uintptr_t primary_part_primitive = memory->read<uintptr_t>(primary_part + offsets::Primitive);
-                    if (primary_part_primitive) {
-                        w_target_pos = memory->read<vector>(primary_part_primitive + offsets::Position);
+                    uintptr_t prim = memory->read<uintptr_t>(primary_part + offsets::Primitive);
+                    if (prim) {
+                        w_target_pos = memory->read<vector>(prim + offsets::Position);
                         position_found = true;
                     }
                 }
             }
-            else if (target_class_name.find("Part") != std::string::npos) {
-                uintptr_t target_primitive = memory->read<uintptr_t>(selected_instance + offsets::Primitive);
-                if (target_primitive) {
-                    w_target_pos = memory->read<vector>(target_primitive + offsets::Position);
+            else {
+                uintptr_t prim = memory->read<uintptr_t>(selected_instance + offsets::Primitive);
+                if (prim) {
+                    w_target_pos = memory->read<vector>(prim + offsets::Position);
                     position_found = true;
                 }
             }
 
-            if (!position_found) {
-                util.m_print("Teleport: Could not get target position from selected instance.");
-                ImGui::EndChild();
-                return;
+            if (position_found) {
+                w_target_pos.y += vars::misc::teleport_offset_y;
+                misc.teleport_to_position(p_local_root, w_target_pos);
             }
-
-            w_target_pos.y += vars::misc::teleport_offset_y;
-            w_target_pos.z += vars::misc::teleport_offset_z;
-
-            if (!std::isfinite(w_target_pos.x) || !std::isfinite(w_target_pos.y) || !std::isfinite(w_target_pos.z)) {
-                util.m_print("Teleport: Aborting due to invalid position");
-                ImGui::EndChild();
-                return;
-            }
-
-            misc.teleport_to_position(p_local_root, w_target_pos);
         }
     }
 
@@ -262,61 +234,120 @@ void c_workspace_viewer::draw_instance_node(uintptr_t instance) {
     }
 }
 
+void c_workspace_viewer::search_recursive(uintptr_t instance, const std::string& query, std::vector<uintptr_t>& results)
+{
+    if (!instance) return;
+    if (results.size() >= 100) return;
+
+    std::string name = core.get_instance_name(instance);
+    std::string class_name = core.get_instance_classname(instance);
+
+    std::string name_lower = name;
+    std::string class_lower = class_name;
+    std::string query_lower = query;
+
+    for (char& c : name_lower) c = tolower(c);
+    for (char& c : class_lower) c = tolower(c);
+    for (char& c : query_lower) c = tolower(c);
+
+    if (name_lower.find(query_lower) != std::string::npos ||
+        class_lower.find(query_lower) != std::string::npos)
+    {
+        results.push_back(instance);
+    }
+
+    std::vector<uintptr_t> children = core.children(instance);
+    for (uintptr_t child : children)
+    {
+        search_recursive(child, query, results);
+    }
+}
+
+void c_workspace_viewer::perform_search(uintptr_t root, const std::string& query)
+{
+    search_results.clear();
+
+    if (query.empty() || !root) {
+        search_performed = false;
+        return;
+    }
+
+    search_recursive(root, query, search_results);
+    search_performed = true;
+}
+
 void c_workspace_viewer::run() {
     ImGui::SetNextWindowSize(ImVec2(700, 500), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Workspace Viewer", &vars::misc::show_workspace_viewer)) {
 
-        // Quick navigation buttons
+        // Navigation buttons
         if (ImGui::Button("Workspace")) {
             selected_instance = core.find_first_child_class(g_main::datamodel, "Workspace");
+            search_performed = false;
         }
         ImGui::SameLine();
         if (ImGui::Button("ReplicatedStorage")) {
             selected_instance = core.find_first_child_class(g_main::datamodel, "ReplicatedStorage");
+            search_performed = false;
         }
         ImGui::SameLine();
         if (ImGui::Button("Players")) {
             selected_instance = core.find_first_child_class(g_main::datamodel, "Players");
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("ReplicatedFirst")) {
-            selected_instance = core.find_first_child_class(g_main::datamodel, "ReplicatedFirst");
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("StarterGui")) {
-            selected_instance = core.find_first_child_class(g_main::datamodel, "StarterGui");
+            search_performed = false;
         }
 
         ImGui::Separator();
 
-        // Show all direct DataModel children
-        if (ImGui::CollapsingHeader("DataModel Direct Children")) {
+        // Search bar
+        ImGui::Text("Search:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(200);
+        bool enter_pressed = ImGui::InputText("##search", search_buffer, sizeof(search_buffer), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        if (ImGui::Button("Go") || enter_pressed) {
             if (g_main::datamodel) {
-                std::vector<uintptr_t> dm_children = core.children(g_main::datamodel);
-                for (uintptr_t child : dm_children) {
-                    std::string name = core.get_instance_name(child);
-                    std::string class_name = core.get_instance_classname(child);
-                    if (ImGui::Selectable((name + " [" + class_name + "]").c_str())) {
-                        selected_instance = child;
-                    }
+                perform_search(g_main::datamodel, search_buffer);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) {
+            search_buffer[0] = '\0';
+            search_results.clear();
+            search_performed = false;
+        }
+        if (search_performed) {
+            ImGui::SameLine();
+            ImGui::Text("(%d)", (int)search_results.size());
+        }
+
+        ImGui::Separator();
+
+        // Left panel
+        ImGui::BeginChild("LeftPanel", ImVec2(300, 0), ImGuiChildFlags_Borders);
+
+        if (search_performed && !search_results.empty()) {
+            ImGui::Text("Results:");
+            for (uintptr_t result : search_results) {
+                std::string name = core.get_instance_name(result);
+                std::string cname = core.get_instance_classname(result);
+                if (ImGui::Selectable((name + " [" + cname + "]").c_str(), selected_instance == result)) {
+                    selected_instance = result;
                 }
             }
         }
-
-        ImGui::Separator();
-
-        ImGui::Columns(2);
-
-        ImGui::BeginChild("Tree");
-        if (g_main::datamodel) {
-            draw_instance_node(g_main::datamodel);
+        else if (search_performed) {
+            ImGui::Text("No results");
         }
+        else {
+            if (g_main::datamodel) {
+                draw_instance_node(g_main::datamodel);
+            }
+        }
+
         ImGui::EndChild();
 
-        ImGui::NextColumn();
+        ImGui::SameLine();
         draw_properties();
-
-        ImGui::Columns(1);
     }
     ImGui::End();
 
@@ -328,6 +359,3 @@ void c_workspace_viewer::run() {
         ImGui::End();
     }
 }
-
-
-c_workspace_viewer workspace_viewer;

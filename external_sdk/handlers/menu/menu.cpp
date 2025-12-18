@@ -426,41 +426,33 @@ void c_menu::run_main_window()
             ImGui::Text("Bee Swarm Simulator");
             ImGui::Separator();
 
-            // ESP
             ImGui::Text("ESP");
             ImGui::Checkbox("Vicious Bee ESP", &vars::bss::vicious_esp);
 
             ImGui::Separator();
 
-            // Vicious Hunter
             ImGui::Text("Vicious Hunter");
             ImGui::Checkbox("Enable Hunter", &vars::bss::vicious_hunter);
             ImGui::Checkbox("Float To Vicious", &vars::bss::float_to_vicious);
-            ImGui::SliderFloat("Float Speed", &vars::bss::float_speed, 10.0f, 200.0f);
-            ImGui::SliderFloat("Check Delay (sec)", &vars::bss::check_delay, 3.0f, 15.0f);
-
-            ImGui::Spacing();
-
-            // Webhook
-            ImGui::Text("Webhook");
-            ImGui::Checkbox("Enable Webhook", &vars::bss::webhook_enabled);
-
-            static char webhook_buffer[256] = "";
-            if (vars::bss::webhook_url.length() > 0 && webhook_buffer[0] == '\0')
-            {
-                strcpy_s(webhook_buffer, vars::bss::webhook_url.c_str());
-            }
-            ImGui::InputText("Webhook URL", webhook_buffer, sizeof(webhook_buffer));
-            vars::bss::webhook_url = webhook_buffer;
+            ImGui::Checkbox("Get Hive First", &vars::bss::need_hive_first);
+            ImGui::SliderFloat("Float Speed", &vars::bss::float_speed, 50.0f, 200.0f);
+            ImGui::SliderFloat("Hive Wait Time", &vars::bss::hive_wait_time, 1.0f, 10.0f);
+            ImGui::SliderFloat("Check Delay", &vars::bss::check_delay, 3.0f, 15.0f);
+            ImGui::SliderFloat("Rejoin Delay", &vars::bss::post_hop_delay, 5.0f, 30.0f, "%.0f sec");
+            ImGui::Text("(Wait time before rejoining - prevents 'file saving' error)");
 
             ImGui::Separator();
 
-            // Status
+            ImGui::Text("Status");
             ImGui::Text("Servers Checked: %d", vars::bss::servers_checked);
 
-            if (vars::bss::is_floating)
+            if (vars::bss::going_to_hive)
             {
-                ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "Floating to Vicious...");
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Going to Hive...");
+            }
+            else if (vars::bss::is_floating)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "Flying to Vicious...");
             }
             else if (vars::bss::vicious_found)
             {
@@ -482,6 +474,8 @@ void c_menu::run_main_window()
                 vars::bss::vicious_found = false;
                 vars::bss::is_hopping = false;
                 vars::bss::is_floating = false;
+                vars::bss::going_to_hive = false;
+                vars::bss::hive_claimed = false;
                 vars::bss::servers_checked = 0;
             }
 
