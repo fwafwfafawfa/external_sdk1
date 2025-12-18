@@ -1590,29 +1590,34 @@ void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
 
 void c_esp::run_vicious_hunter()
 {
-    if (!g_main::datamodel || !g_main::localplayer) return;
+    if (vars::bss::is_hopping) return;
     if (!vars::bss::vicious_hunter) return;
     if (vars::bss::vicious_found) return;
-    if (vars::bss::is_hopping) return;
-
     if (!tp_handler.is_ready()) return;
+    if (!g_main::datamodel || !g_main::localplayer) return;
 
     static auto join_time = std::chrono::steady_clock::now();
     static bool timer_started = false;
+    static bool just_hopped = false;
 
+    // Timer logic for join delay
     if (!timer_started)
     {
         join_time = std::chrono::steady_clock::now();
         timer_started = true;
+        just_hopped = (vars::bss::servers_checked > 0);
+        if (just_hopped) util.m_print("[Vicious Hunter] Waiting for BSS to load...");
         return;
     }
 
     auto now = std::chrono::steady_clock::now();
     float elapsed = std::chrono::duration<float>(now - join_time).count();
+    float required_delay = just_hopped ? 15.0f : vars::bss::check_delay;
 
-    if (elapsed < vars::bss::check_delay) return;
+    if (elapsed < required_delay) return;
 
-    if (!g_main::datamodel || !g_main::localplayer) return;
+    just_hopped = false;
+    timer_started = false;
 
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     if (!workspace) return;
@@ -1644,15 +1649,14 @@ void c_esp::run_vicious_hunter()
         MessageBeep(MB_ICONEXCLAMATION);
         util.m_print("[Vicious Hunter] FOUND! Servers checked: %d", vars::bss::servers_checked);
 
-        // Webhook
         if (vars::bss::webhook_enabled && !vars::bss::webhook_url.empty())
         {
             std::string webhook_cmd = "start /B curl -X POST -H \"Content-Type: application/json\" -d \"{\\\"content\\\":\\\"**Vicious Bee Found!** Servers checked: " + std::to_string(vars::bss::servers_checked) + "\\\"}\" \"" + vars::bss::webhook_url + "\" >nul 2>&1";
             system(webhook_cmd.c_str());
         }
 
-        // Get Vicious position for later
         float vicious_x = 0, vicious_y = 0, vicious_z = 0;
+        bool has_vicious_pos = false;
 
         if (vars::bss::float_to_vicious && vicious_monster)
         {
@@ -1676,33 +1680,23 @@ void c_esp::run_vicious_hunter()
 
             if (vicious_part)
             {
-                uintptr_t vicious_primitive = memory->read<uintptr_t>(vicious_part + offsets::Primitive);
-                if (vicious_primitive)
+                uintptr_t prim = memory->read<uintptr_t>(vicious_part + offsets::Primitive);
+                if (prim)
                 {
-                    vector vicious_pos = memory->read<vector>(vicious_primitive + offsets::Position);
-                    vicious_x = vicious_pos.x;
-                    vicious_y = vicious_pos.y + 5.0f;
-                    vicious_z = vicious_pos.z;
+                    vector vpos = memory->read<vector>(prim + offsets::Position);
+                    vicious_x = vpos.x;
+                    vicious_y = vpos.y + 50.0f; // Fly high above
+                    vicious_z = vpos.z;
+                    has_vicious_pos = true;
                 }
             }
 
-            // ============================================
-            // HIVE FIRST LOGIC
-            // ============================================
             if (vars::bss::need_hive_first && !vars::bss::hive_claimed)
             {
                 float hive_x, hive_y, hive_z;
                 if (find_hive_position(hive_x, hive_y, hive_z))
                 {
                     util.m_print("[Vicious Hunter] Going to hive first...");
-
-                    // Save vicious position for after hive
-                    static float saved_vicious_x = 0, saved_vicious_y = 0, saved_vicious_z = 0;
-                    saved_vicious_x = vicious_x;
-                    saved_vicious_y = vicious_y;
-                    saved_vicious_z = vicious_z;
-
-                    // Set target to hive
                     vars::bss::target_x = hive_x;
                     vars::bss::target_y = hive_y;
                     vars::bss::target_z = hive_z;
@@ -1711,22 +1705,24 @@ void c_esp::run_vicious_hunter()
                 }
                 else
                 {
-                    // Can't find hive, go directly to vicious
                     util.m_print("[Vicious Hunter] No hive found, going to Vicious...");
+                    if (has_vicious_pos) {
+                        vars::bss::target_x = vicious_x;
+                        vars::bss::target_y = vicious_y;
+                        vars::bss::target_z = vicious_z;
+                        vars::bss::is_floating = true;
+                    }
+                }
+            }
+            else
+            {
+                if (has_vicious_pos) {
+                    util.m_print("[Vicious Hunter] Going to Vicious (High Altitude)...");
                     vars::bss::target_x = vicious_x;
                     vars::bss::target_y = vicious_y;
                     vars::bss::target_z = vicious_z;
                     vars::bss::is_floating = true;
                 }
-            }
-            else
-            {
-                // Hive already claimed or not needed, go to vicious
-                vars::bss::target_x = vicious_x;
-                vars::bss::target_y = vicious_y;
-                vars::bss::target_z = vicious_z;
-                vars::bss::is_floating = true;
-                util.m_print("[Vicious Hunter] Going to Vicious...");
             }
         }
     }
@@ -1738,7 +1734,7 @@ void c_esp::run_vicious_hunter()
         util.m_print("[Vicious Hunter] Not found. Hopping... (Server #%d)", vars::bss::servers_checked);
         server_hop();
     }
-}
+}   
 
 void c_esp::float_to_target()
 {
@@ -1750,6 +1746,13 @@ void c_esp::float_to_target()
     if (!vars::bss::is_floating) return;
     if (!g_main::datamodel || !g_main::localplayer) return;
     if (!tp_handler.is_ready()) return;
+
+    // Delta Time
+    static auto last_time = std::chrono::high_resolution_clock::now();
+    auto now = std::chrono::high_resolution_clock::now();
+    float dt = std::chrono::duration<float>(now - last_time).count();
+    last_time = now;
+    if (dt > 0.1f) dt = 0.016f;
 
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     if (!workspace) return;
@@ -1763,28 +1766,41 @@ void c_esp::float_to_target()
     uintptr_t local_primitive = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
     if (!local_primitive) return;
 
-    vector current_pos = memory->read<vector>(local_primitive + offsets::Position);
+    // Local Structs
+    struct LocalMatrix3 { float data[9]; };
+    struct LocalVector3 { float x, y, z; };
+    struct LocalCFrame { LocalMatrix3 rot; LocalVector3 pos; };
 
-    float dx = vars::bss::target_x - current_pos.x;
-    float dy = vars::bss::target_y - current_pos.y;
-    float dz = vars::bss::target_z - current_pos.z;
+    LocalCFrame cf = memory->read<LocalCFrame>(local_primitive + offsets::CFrame);
+
+    float dx = vars::bss::target_x - cf.pos.x;
+    float dy = vars::bss::target_y - cf.pos.y;
+    float dz = vars::bss::target_z - cf.pos.z;
     float distance = sqrtf(dx * dx + dy * dy + dz * dz);
 
-    // Arrived at target
-    if (distance < 10.0f)
+    if (distance < 5.0f)
     {
-        memory->write<vector>(local_primitive + offsets::Velocity, vector{ 0, 0, 0 });
+        memory->write<LocalVector3>(local_primitive + offsets::Velocity, { 0, 0, 0 });
 
         if (vars::bss::going_to_hive)
         {
-            util.m_print("[Vicious Hunter] Arrived at hive! Waiting %.1fs...", vars::bss::hive_wait_time);
+            util.m_print("[Vicious Hunter] At hive! Pressing E...");
 
+            // Press E loop
+            for (int k = 0; k < 5; k++) {
+                keybd_event('E', 0, 0, 0);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                keybd_event('E', 0, KEYEVENTF_KEYUP, 0);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+
+            util.m_print("[Vicious Hunter] Waiting %.1fs...", vars::bss::hive_wait_time);
             std::this_thread::sleep_for(std::chrono::milliseconds((int)(vars::bss::hive_wait_time * 1000)));
 
             vars::bss::hive_claimed = true;
             vars::bss::going_to_hive = false;
 
-            // Now go to Vicious
+            // Re-find Vicious
             uintptr_t monsters = core.find_first_child(workspace, "Monsters");
             if (monsters)
             {
@@ -1792,37 +1808,27 @@ void c_esp::float_to_target()
                 for (uintptr_t monster : monster_children)
                 {
                     if (!monster) continue;
-                    std::string name = core.get_instance_name(monster);
-                    if (name.find("Vicious") != std::string::npos)
+                    if (core.get_instance_name(monster).find("Vicious") != std::string::npos)
                     {
-                        uintptr_t vicious_part = core.find_first_child(monster, "HumanoidRootPart");
-                        if (!vicious_part)
-                        {
+                        uintptr_t vpart = core.find_first_child(monster, "HumanoidRootPart");
+                        if (!vpart) {
+                            // Fallback scan
                             std::vector<uintptr_t> parts = core.children(monster);
-                            for (uintptr_t p : parts)
-                            {
-                                if (core.get_instance_classname(p).find("Part") != std::string::npos)
-                                {
-                                    vicious_part = p;
-                                    break;
-                                }
-                            }
+                            for (auto p : parts) if (core.get_instance_classname(p).find("Part") != std::string::npos) { vpart = p; break; }
                         }
 
-                        if (vicious_part)
+                        if (vpart)
                         {
-                            uintptr_t prim = memory->read<uintptr_t>(vicious_part + offsets::Primitive);
-                            if (prim)
-                            {
+                            uintptr_t prim = memory->read<uintptr_t>(vpart + offsets::Primitive);
+                            if (prim) {
                                 vector vpos = memory->read<vector>(prim + offsets::Position);
                                 vars::bss::target_x = vpos.x;
-                                vars::bss::target_y = vpos.y + 5.0f;
+                                vars::bss::target_y = vpos.y + 5.0f; // Lower altitude for attack
                                 vars::bss::target_z = vpos.z;
-                                util.m_print("[Vicious Hunter] Now going to Vicious!");
+                                util.m_print("[Vicious Hunter] Hive done! Attacking Vicious!");
                                 return;
                             }
                         }
-                        break;
                     }
                 }
             }
@@ -1833,19 +1839,20 @@ void c_esp::float_to_target()
         return;
     }
 
-    // Move towards target
+    // Move Constant
+    float step_dist = vars::bss::float_speed * dt;
+    if (step_dist > distance) step_dist = distance;
+
     float nx = dx / distance;
     float ny = dy / distance;
     float nz = dz / distance;
 
-    float speed = vars::bss::float_speed;
+    cf.pos.x += nx * step_dist;
+    cf.pos.y += ny * step_dist;
+    cf.pos.z += nz * step_dist;
 
-    vector velocity;
-    velocity.x = nx * speed;
-    velocity.y = ny * speed;
-    velocity.z = nz * speed;
-
-    memory->write<vector>(local_primitive + offsets::Velocity, velocity);
+    memory->write<LocalCFrame>(local_primitive + offsets::CFrame, cf);
+    memory->write<LocalVector3>(local_primitive + offsets::Velocity, { 0, 0, 0 });
     memory->write<bool>(local_primitive + offsets::CanCollide, false);
 }
 

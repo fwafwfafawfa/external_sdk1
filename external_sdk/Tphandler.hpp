@@ -10,6 +10,7 @@ private:
     std::thread monitor_thread;
 
     uint64_t last_job_id = 0;
+    uint64_t last_place_id = 0;
 
     std::atomic<bool> force_rescan_flag = false;
     std::atomic<bool> is_hopping = false;
@@ -23,6 +24,7 @@ public:
 
     bool is_ready() const {
         if (is_hopping) return false;
+        if (g_safe_mode) return false;
         if (!memory) return false;
         if (g_main::datamodel == 0) return false;
         if (g_main::localplayer == 0) return false;
@@ -33,43 +35,44 @@ public:
     void update_cache() {
         if (g_main::datamodel != 0) {
             last_job_id = memory->read<uint64_t>(g_main::datamodel + offsets::JobId);
+            last_place_id = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
         }
+    }
+
+    void clear_pointers() {
+        g_main::datamodel = 0;
+        g_main::localplayer = 0;
+        g_main::v_engine = 0;
+        g_main::localplayer_team = 0;
+        last_job_id = 0;
+        last_place_id = 0;
     }
 
     void monitor_loop() {
         util.m_print("tp_handler: Monitor started");
 
         while (running) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
             try {
-                // ====== HOPPING MODE ======
+                // ====== SERVER HOP MODE ======
                 if (is_hopping) {
                     util.m_print("tp_handler: [HOP] Hopping mode active...");
 
-                    // Clear memory
                     if (memory) {
-                        util.m_print("tp_handler: [HOP] Deleting old memory object...");
                         delete memory;
                         memory = nullptr;
                     }
-                    g_main::datamodel = 0;
-                    g_main::localplayer = 0;
-                    g_main::v_engine = 0;
-                    last_job_id = 0;
+                    clear_pointers();
 
-                    // Wait for Roblox to close
                     util.m_print("tp_handler: [HOP] Waiting for Roblox to close...");
                     while (FindWindowA(NULL, "Roblox")) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(500));
                     }
                     util.m_print("tp_handler: [HOP] Roblox closed!");
 
-                    // SAFE MODE OFF HERE
                     g_safe_mode = false;
-                    util.m_print("tp_handler: [HOP] Safe mode disabled");
 
-                    // Wait for new window
                     util.m_print("tp_handler: [HOP] Waiting for new Roblox window...");
                     int timeout = 0;
                     while (!FindWindowA(NULL, "Roblox") && running && timeout < 120) {
@@ -79,117 +82,105 @@ public:
 
                     if (!running) break;
 
-                    if (timeout >= 120) {
-                        util.m_print("tp_handler: [HOP] Timeout waiting for window!");
-                        is_hopping = false;
-                        continue;
-                    }
-
-                    util.m_print("tp_handler: [HOP] New window found! Waiting for game to load...");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(8));  // 15 seconds for BSS
+                    util.m_print("tp_handler: [HOP] New window found! Waiting 5s...");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(8000));
 
                     is_hopping = false;
                     force_rescan_flag = true;
-                    util.m_print("tp_handler: [HOP] Ready to reattach!");
+                    continue;
                 }
 
-                // ====== CHECK WINDOW ======
+                // ====== CHECK WINDOW EXISTS ======
                 HWND hwnd = FindWindowA(NULL, "Roblox");
                 if (!hwnd) {
-                    if (g_main::datamodel != 0) {
-                        util.m_print("tp_handler: Window gone, clearing pointers");
+                    if (memory || g_main::datamodel != 0) {
+                        util.m_print("tp_handler: Window gone, resetting...");
                         if (memory) { delete memory; memory = nullptr; }
-                        g_main::datamodel = 0;
-                        g_main::localplayer = 0;
-                        g_main::v_engine = 0;
+                        clear_pointers();
+                        g_safe_mode = false;
                     }
                     continue;
                 }
 
-                // ====== CREATE MEMORY ======
+                // ====== ENSURE SAFE MODE IS OFF ======
+                g_safe_mode = false;
+
+                // ====== CREATE MEMORY IF NEEDED ======
                 if (!memory) {
-                    util.m_print("tp_handler: No memory object, creating...");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+                    util.m_print("tp_handler: Creating memory object...");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
                     memory = new c_memory("RobloxPlayerBeta.exe");
 
-                    if (!memory) {
-                        util.m_print("tp_handler: Failed to create memory object!");
+                    if (!memory || !memory->find_image()) {
+                        util.m_print("tp_handler: Failed to attach!");
+                        if (memory) { delete memory; memory = nullptr; }
                         continue;
                     }
 
-                    DWORD pid = memory->get_pid();  // Add get_pid() if you don't have it
-                    util.m_print("tp_handler: Attached to PID: %d", pid);
-
-                    uintptr_t base = memory->find_image();
-                    util.m_print("tp_handler: Base address: 0x%llX", base);
-
-                    if (!base) {
-                        util.m_print("tp_handler: Failed to find base address!");
-                        delete memory;
-                        memory = nullptr;
-                        continue;
-                    }
-
-                    util.m_print("tp_handler: Memory attached successfully!");
+                    util.m_print("tp_handler: Memory attached!");
                     force_rescan_flag = true;
                 }
 
-                // ====== CHECK MEMORY VALID ======
-                if (!memory->find_image()) {
-                    util.m_print("tp_handler: Memory invalid!");
-                    delete memory;
-                    memory = nullptr;
-                    continue;
+                // ====== VALIDATE EXISTING POINTERS ======
+                if (g_main::datamodel != 0 && memory) {
+                    auto base_address = memory->find_image();
+                    if (base_address) {
+                        uintptr_t fake_dm_ptr = memory->read<uintptr_t>(base_address + offsets::FakeDataModelPointer);
+                        uintptr_t current_datamodel = 0;
+
+                        if (fake_dm_ptr && fake_dm_ptr > 0x10000) {
+                            current_datamodel = memory->read<uintptr_t>(fake_dm_ptr + offsets::FakeDataModelToDataModel);
+                        }
+
+                        if (current_datamodel != g_main::datamodel) {
+                            util.m_print("tp_handler: DataModel changed! Reinitializing...");
+                            clear_pointers();
+                            force_rescan_flag = true;
+                        }
+                        else if (current_datamodel == 0 || current_datamodel < 0x10000) {
+                            util.m_print("tp_handler: DataModel invalid!");
+                            clear_pointers();
+                            force_rescan_flag = true;
+                        }
+                    }
                 }
 
-                // ====== REINITIALIZE POINTERS ======
+                // ====== INITIALIZE POINTERS IF NEEDED ======
                 bool needs_init = force_rescan_flag ||
                     g_main::datamodel == 0 ||
                     g_main::localplayer == 0;
 
                 if (needs_init) {
-                    util.m_print("tp_handler: Initializing pointers...");
                     force_rescan_flag = false;
 
-                    for (int attempt = 0; attempt < 10; attempt++) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    reinitialize_game_pointers();
 
-                        reinitialize_game_pointers();
+                    if (g_main::datamodel != 0 && g_main::localplayer != 0) {
+                        uint64_t place_id = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
 
-                        if (g_main::datamodel != 0 && g_main::localplayer != 0) {
+                        if (place_id != 0) {
                             update_cache();
-                            vars::bss::is_hopping = false;
-                            util.m_print("tp_handler: SUCCESS! Pointers found.");
-                            break;
+                            util.m_print("tp_handler: SUCCESS! PlaceId: %llu", place_id);
                         }
-
-                        util.m_print("tp_handler: Attempt %d/10 failed...", attempt + 1);
-                    }
-
-                    if (g_main::datamodel == 0) {
-                        util.m_print("tp_handler: Failed after 10 attempts!");
-                    }
-
-                    if (g_main::datamodel == 0) {
-                        util.m_print("tp_handler: Failed after 30 attempts!");
-                        // Re-enable safe mode if we failed
-                        g_safe_mode = true;
+                        else {
+                            clear_pointers();
+                        }
                     }
                 }
 
             }
             catch (...) {
-                util.m_print("tp_handler: EXCEPTION! Resetting...");
+                util.m_print("tp_handler: Exception caught, resetting...");
                 if (memory) { delete memory; memory = nullptr; }
-                g_main::datamodel = 0;
-                g_main::localplayer = 0;
-                g_main::v_engine = 0;
+                clear_pointers();
+                g_safe_mode = false;
             }
         }
 
         util.m_print("tp_handler: Monitor stopped");
     }
+
     void start() {
         if (running) return;
         running = true;
