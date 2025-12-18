@@ -214,3 +214,4 @@ bool c_core::world_to_screen( const vector& world_pos, vector2d& screen_pos, con
 
     return true;
 }
+

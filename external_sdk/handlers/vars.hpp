@@ -37,6 +37,7 @@ namespace vars
         inline bool chams_enemies_only = true;
         inline float chams_transparency = 0.5f;
         inline float chams_opacity = 0.5f;
+        inline bool show_vicious = true;
 
         inline ImColor esp_box_color = ImColor(255, 255, 255, 255);
         inline ImColor esp_name_color = ImColor(255, 255, 255, 255);
@@ -170,6 +171,29 @@ namespace vars
         inline uintptr_t selected_player_for_info = 0;
         inline std::string spectating_player_name = "";
         inline uintptr_t spectating_camera = 0;
+    }
+
+    namespace bss
+    {
+        inline bool vicious_hunter = false;
+        inline bool vicious_found = false;
+        inline bool is_hopping = false;
+        inline bool vicious_esp = true;
+        inline int servers_checked = 0;
+        inline float check_delay = 5.0f;
+        
+        inline bool auto_teleport = false;
+        inline bool float_to_vicious = true;
+        inline float float_speed = 50.0f;
+        inline bool is_floating = false;
+        
+        // USE FLOATS ONLY - Delete "inline vector target_pos..."
+        inline float target_x = 0.0f;
+        inline float target_y = 0.0f;
+        inline float target_z = 0.0f;
+        
+        inline bool webhook_enabled = false;
+        inline std::string webhook_url = "";
     }
 
     namespace anti_afk

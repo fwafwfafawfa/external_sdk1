@@ -126,6 +126,7 @@ void c_menu::run_main_window()
             ImGui::Checkbox("Show FPS (broken)", &vars::esp::show_fps);
             ImGui::Checkbox("Hide Teammates", &vars::esp::hide_teammates);
             ImGui::Checkbox("Hide Dead", &vars::esp::hide_dead);
+            ImGui::Checkbox("Vicious Bee ESP", &vars::esp::show_vicious);
 
             ImGui::ColorEdit4("Box Color", (float*)&vars::esp::esp_box_color);
             ImGui::ColorEdit4("Tracer Color", (float*)&vars::esp::esp_tracer_color);
@@ -415,6 +416,73 @@ void c_menu::run_main_window()
                     c_esp::start_hitbox_thread();
                     thread_started = true;
                 }
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("BSS"))
+        {
+            ImGui::Text("Bee Swarm Simulator");
+            ImGui::Separator();
+
+            // ESP
+            ImGui::Text("ESP");
+            ImGui::Checkbox("Vicious Bee ESP", &vars::bss::vicious_esp);
+
+            ImGui::Separator();
+
+            // Vicious Hunter
+            ImGui::Text("Vicious Hunter");
+            ImGui::Checkbox("Enable Hunter", &vars::bss::vicious_hunter);
+            ImGui::Checkbox("Float To Vicious", &vars::bss::float_to_vicious);
+            ImGui::SliderFloat("Float Speed", &vars::bss::float_speed, 10.0f, 200.0f);
+            ImGui::SliderFloat("Check Delay (sec)", &vars::bss::check_delay, 3.0f, 15.0f);
+
+            ImGui::Spacing();
+
+            // Webhook
+            ImGui::Text("Webhook");
+            ImGui::Checkbox("Enable Webhook", &vars::bss::webhook_enabled);
+
+            static char webhook_buffer[256] = "";
+            if (vars::bss::webhook_url.length() > 0 && webhook_buffer[0] == '\0')
+            {
+                strcpy_s(webhook_buffer, vars::bss::webhook_url.c_str());
+            }
+            ImGui::InputText("Webhook URL", webhook_buffer, sizeof(webhook_buffer));
+            vars::bss::webhook_url = webhook_buffer;
+
+            ImGui::Separator();
+
+            // Status
+            ImGui::Text("Servers Checked: %d", vars::bss::servers_checked);
+
+            if (vars::bss::is_floating)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.0f), "Floating to Vicious...");
+            }
+            else if (vars::bss::vicious_found)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "VICIOUS FOUND!");
+            }
+            else if (vars::bss::is_hopping)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Hopping...");
+            }
+            else if (vars::bss::vicious_hunter)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Searching...");
+            }
+
+            ImGui::Spacing();
+
+            if (ImGui::Button("Reset Hunter"))
+            {
+                vars::bss::vicious_found = false;
+                vars::bss::is_hopping = false;
+                vars::bss::is_floating = false;
+                vars::bss::servers_checked = 0;
             }
 
             ImGui::EndTabItem();

@@ -1,5 +1,6 @@
 #include "esp.hpp"
 #include "../game/core.hpp"
+#include "../Tphandler.hpp"
 #include "../addons/kernel/memory.hpp"
 #include "../game/offsets/offsets.hpp"
 #include "../handlers/overlay/draw.hpp"
@@ -1434,4 +1435,328 @@ void c_esp::hitbox_expander_thread()
         // Normal delay between loops
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+}
+
+void c_esp::server_hop()
+{
+    const std::string place_id = "1537690962";
+
+    // Tell tp_handler to rescan after hop
+    tp_handler.request_rescan();
+
+    // Invalidate current pointers
+    g_main::datamodel = 0;
+    g_main::localplayer = 0;
+    g_main::v_engine = 0;
+
+    std::string command = "start roblox://placeId=" + place_id;
+    system(command.c_str());
+
+    std::thread([]()
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+            HWND roblox_window = FindWindowA(nullptr, "Roblox");
+            if (roblox_window)
+            {
+                PostMessage(roblox_window, WM_CLOSE, 0, 0);
+            }
+
+            vars::bss::is_hopping = false;
+
+        }).detach();
+}
+
+void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
+{
+    if (!vars::bss::vicious_esp) return;
+
+    // Get Workspace.Monsters
+    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+    if (!workspace) return;
+
+    uintptr_t monsters = core.find_first_child(workspace, "Monsters");
+    if (!monsters) return;
+
+    // Get local player position for distance
+    vector local_pos = { 0, 0, 0 };
+    uintptr_t local_character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+    if (local_character)
+    {
+        uintptr_t local_root = core.find_first_child(local_character, "HumanoidRootPart");
+        if (local_root)
+        {
+            uintptr_t p_local_root = memory->read<uintptr_t>(local_root + offsets::Primitive);
+            if (p_local_root)
+                local_pos = memory->read<vector>(p_local_root + offsets::Position);
+        }
+    }
+
+    // Loop through all monsters
+    std::vector<uintptr_t> monster_children = core.children(monsters);
+
+    for (uintptr_t monster : monster_children)
+    {
+        if (!monster) continue;
+
+        std::string name = core.get_instance_name(monster);
+
+        // Check if Vicious Bee
+        if (name.find("Vicious") == std::string::npos) continue;
+
+        // Get position - try HumanoidRootPart first, then PrimaryPart, then any part
+        uintptr_t part = core.find_first_child(monster, "HumanoidRootPart");
+        if (!part) part = core.find_first_child(monster, "Torso");
+        if (!part) part = core.find_first_child(monster, "Head");
+
+        // If still no part, search for any BasePart
+        if (!part)
+        {
+            std::vector<uintptr_t> monster_parts = core.children(monster);
+            for (uintptr_t child : monster_parts)
+            {
+                std::string class_name = core.get_instance_classname(child);
+                if (class_name.find("Part") != std::string::npos)
+                {
+                    part = child;
+                    break;
+                }
+            }
+        }
+
+        if (!part) continue;
+
+        uintptr_t primitive = memory->read<uintptr_t>(part + offsets::Primitive);
+        if (!primitive) continue;
+
+        vector world_pos = memory->read<vector>(primitive + offsets::Position);
+        vector2d screen_pos;
+
+        if (!core.world_to_screen(world_pos, screen_pos, viewmatrix)) continue;
+
+        // Calculate distance
+        float distance = sqrtf(
+            powf(world_pos.x - local_pos.x, 2) +
+            powf(world_pos.y - local_pos.y, 2) +
+            powf(world_pos.z - local_pos.z, 2)
+        );
+
+        // Draw ESP
+        std::stringstream ss;
+        ss << "VICIOUS BEE [" << std::fixed << std::setprecision(0) << distance << "m]";
+
+        // Red text with black outline
+        draw.outlined_string(
+            ImVec2(screen_pos.x, screen_pos.y),
+            ss.str().c_str(),
+            ImColor(255, 0, 0, 255),      // Red
+            ImColor(0, 0, 0, 255),         // Black outline
+            true                            // Centered
+        );
+
+        // Tracer line from bottom of screen
+        int screen_width = core.get_screen_width();
+        int screen_height = core.get_screen_height();
+
+        draw.line(
+            ImVec2(screen_width * 0.5f, screen_height),
+            ImVec2(screen_pos.x, screen_pos.y),
+            ImColor(255, 0, 0, 255),
+            2.0f  // Thicker line for visibility
+        );
+    }
+}
+
+void c_esp::run_vicious_hunter()
+{
+    if (!vars::bss::vicious_hunter) return;
+    if (vars::bss::vicious_found) return;
+    if (vars::bss::is_hopping) return;
+
+    if (!tp_handler.is_ready()) return;
+
+    static auto join_time = std::chrono::steady_clock::now();
+    static bool timer_started = false;
+
+    if (!timer_started)
+    {
+        join_time = std::chrono::steady_clock::now();
+        timer_started = true;
+        return;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    float elapsed = std::chrono::duration<float>(now - join_time).count();
+
+    if (elapsed < vars::bss::check_delay) return;
+
+    if (!g_main::datamodel || !g_main::localplayer) return;
+
+    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+    if (!workspace) return;
+
+    uintptr_t monsters = core.find_first_child(workspace, "Monsters");
+    if (!monsters) return;
+
+    bool found = false;
+    uintptr_t vicious_monster = 0;
+
+    std::vector<uintptr_t> monster_children = core.children(monsters);
+
+    for (uintptr_t monster : monster_children)
+    {
+        if (!monster) continue;
+        std::string name = core.get_instance_name(monster);
+        if (name.find("Vicious") != std::string::npos)
+        {
+            found = true;
+            vicious_monster = monster;
+            break;
+        }
+    }
+
+    if (found)
+    {
+        vars::bss::vicious_found = true;
+        vars::bss::is_hopping = false;
+        MessageBeep(MB_ICONEXCLAMATION);
+        util.m_print("[Vicious Hunter] FOUND! Servers checked: %d", vars::bss::servers_checked);
+
+        // Webhook
+        if (vars::bss::webhook_enabled && !vars::bss::webhook_url.empty())
+        {
+            std::string webhook_cmd = "start /B curl -X POST -H \"Content-Type: application/json\" -d \"{\\\"content\\\":\\\"**Vicious Bee Found!** Servers checked: " + std::to_string(vars::bss::servers_checked) + "\\\"}\" \"" + vars::bss::webhook_url + "\" >nul 2>&1";
+            system(webhook_cmd.c_str());
+        }
+
+        // Setup Float
+        if (vars::bss::float_to_vicious && vicious_monster)
+        {
+            util.m_print("[Debug] Vicious found, looking for HumanoidRootPart...");
+
+            uintptr_t vicious_part = core.find_first_child(vicious_monster, "HumanoidRootPart");
+            if (!vicious_part) vicious_part = core.find_first_child(vicious_monster, "Torso");
+            if (!vicious_part) vicious_part = core.find_first_child(vicious_monster, "Head");
+
+            if (!vicious_part)
+            {
+                util.m_print("[Debug] Specific parts not found, scanning children...");
+                std::vector<uintptr_t> parts = core.children(vicious_monster);
+                for (uintptr_t p : parts)
+                {
+                    std::string class_name = core.get_instance_classname(p);
+                    if (class_name.find("Part") != std::string::npos)
+                    {
+                        vicious_part = p;
+                        break;
+                    }
+                }
+            }
+
+            if (vicious_part)
+            {
+                uintptr_t vicious_primitive = memory->read<uintptr_t>(vicious_part + offsets::Primitive);
+                if (vicious_primitive)
+                {
+                    vector vicious_pos = memory->read<vector>(vicious_primitive + offsets::Position);
+
+                    if (vicious_pos.x == 0 && vicious_pos.y == 0) {
+                        util.m_print("[Debug] ERROR: Read (0,0,0) for Vicious position!");
+                    }
+                    else {
+                        // Set target
+                        vars::bss::target_x = vicious_pos.x;
+                        vars::bss::target_y = vicious_pos.y + 5.0f; // 5 studs above
+                        vars::bss::target_z = vicious_pos.z;
+                        vars::bss::is_floating = true;
+
+                        util.m_print("[Debug] Target set to: %.1f, %.1f, %.1f", vars::bss::target_x, vars::bss::target_y, vars::bss::target_z);
+                        util.m_print("[Vicious Hunter] Floating enabled!");
+                    }
+                }
+                else
+                {
+                    util.m_print("[Debug] Failed to read Vicious Primitive address");
+                }
+            }
+            else
+            {
+                util.m_print("[Debug] Failed to find ANY part in Vicious Bee model");
+            }
+        }
+    }
+    else
+    {
+        vars::bss::servers_checked++;
+        vars::bss::is_hopping = true;
+        timer_started = false;
+        util.m_print("[Vicious Hunter] Not found. Hopping... (Server #%d)", vars::bss::servers_checked);
+        server_hop();
+    }
+}
+
+void c_esp::float_to_target()
+{
+    if (!vars::bss::is_floating) return;
+
+    // 1. Chunk Delay
+    static auto last_step = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_step).count() < 50)
+        return;
+    last_step = now;
+
+    if (!g_main::datamodel || !g_main::localplayer) return;
+
+    // 2. Get Pointers
+    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+    if (!workspace) return;
+    uintptr_t local_character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
+    if (!local_character) return;
+    uintptr_t local_hrp = core.find_first_child(local_character, "HumanoidRootPart");
+    if (!local_hrp) return;
+    uintptr_t local_primitive = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
+    if (!local_primitive) return;
+
+    // 3. Define Local CFrame Struct (48 bytes: 9 floats rotation + 3 floats position)
+    struct LocalCFrame {
+        float rot[9];   // 3x3 rotation matrix
+        float x, y, z;  // position
+    };
+
+    // 4. Read Current CFrame
+    LocalCFrame cf = memory->read<LocalCFrame>(local_primitive + offsets::CFrame);
+
+    // 5. Calculate Distance
+    float dx = vars::bss::target_x - cf.x;
+    float dy = vars::bss::target_y - cf.y;
+    float dz = vars::bss::target_z - cf.z;
+    float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+
+    // 6. Arrived?
+    if (distance < 5.0f) {
+        vars::bss::is_floating = false;
+        memory->write<vector>(local_primitive + offsets::Velocity, vector{ 0, 0, 0 });
+        util.m_print("[Vicious Hunter] Arrived!");
+        return;
+    }
+
+    // 7. Calculate Chunk (15 studs max)
+    float step = 15.0f;
+    if (step > distance) step = distance;
+
+    float nx = dx / distance;
+    float ny = dy / distance;
+    float nz = dz / distance;
+
+    // 8. Update Position Only (Keep Rotation)
+    cf.x = cf.x + (nx * step);
+    cf.y = cf.y + (ny * step);
+    cf.z = cf.z + (nz * step);
+
+    // 9. Write Full CFrame
+    memory->write<LocalCFrame>(local_primitive + offsets::CFrame, cf);
+
+    // 10. Kill Physics
+    memory->write<vector>(local_primitive + offsets::Velocity, vector{ 0, 0, 0 });
 }

@@ -165,6 +165,7 @@ namespace offsets {
     inline constexpr uintptr_t Value = 0xD0;
     inline constexpr uintptr_t ValueGetSetToValue = 0xC0;
     inline constexpr uintptr_t Velocity = 0xF0;
+    constexpr uintptr_t RotVelocity = offsets::Velocity + 0xC;
     inline constexpr uintptr_t ViewportSize = 0x2E8;
     inline constexpr uintptr_t VisualEngine = 0x10;
     inline constexpr uintptr_t VisualEnginePointer = 0x7A684F0;
