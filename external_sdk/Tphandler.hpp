@@ -3,7 +3,6 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
-
 class c_tp_handler {
 private:
     std::atomic<bool> running = false;
@@ -14,7 +13,6 @@ private:
 
     std::atomic<bool> force_rescan_flag = false;
     std::atomic<bool> is_hopping = false;
-
 public:
     void request_rescan() {
         is_hopping = true;
@@ -55,24 +53,32 @@ public:
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
             try {
-                // ====== SERVER HOP MODE ======
                 if (is_hopping) {
                     util.m_print("tp_handler: [HOP] Hopping mode active...");
 
+                    // Clear memory
                     if (memory) {
+                        util.m_print("tp_handler: [HOP] Deleting old memory object...");
                         delete memory;
                         memory = nullptr;
                     }
-                    clear_pointers();
+                    g_main::datamodel = 0;
+                    g_main::localplayer = 0;
+                    g_main::v_engine = 0;
+                    last_job_id = 0;
 
+                    // Wait for Roblox to close
                     util.m_print("tp_handler: [HOP] Waiting for Roblox to close...");
                     while (FindWindowA(NULL, "Roblox")) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(500));
                     }
                     util.m_print("tp_handler: [HOP] Roblox closed!");
 
+                    // SAFE MODE OFF HERE
                     g_safe_mode = false;
+                    util.m_print("tp_handler: [HOP] Safe mode disabled");
 
+                    // Wait for new window
                     util.m_print("tp_handler: [HOP] Waiting for new Roblox window...");
                     int timeout = 0;
                     while (!FindWindowA(NULL, "Roblox") && running && timeout < 120) {
@@ -82,12 +88,18 @@ public:
 
                     if (!running) break;
 
-                    util.m_print("tp_handler: [HOP] New window found! Waiting 5s...");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(8000));
+                    if (timeout >= 120) {
+                        util.m_print("tp_handler: [HOP] Timeout waiting for window!");
+                        is_hopping = false;
+                        continue;
+                    }
+
+                    util.m_print("tp_handler: [HOP] New window found! Waiting for game to load...");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(15000));  // 15 seconds for BSS
 
                     is_hopping = false;
                     force_rescan_flag = true;
-                    continue;
+                    util.m_print("tp_handler: [HOP] Ready to reattach!");
                 }
 
                 // ====== CHECK WINDOW EXISTS ======
@@ -122,10 +134,10 @@ public:
                     force_rescan_flag = true;
                 }
 
-                // ====== VALIDATE EXISTING POINTERS ======
                 if (g_main::datamodel != 0 && memory) {
                     auto base_address = memory->find_image();
                     if (base_address) {
+                        // Re-read current DataModel from memory
                         uintptr_t fake_dm_ptr = memory->read<uintptr_t>(base_address + offsets::FakeDataModelPointer);
                         uintptr_t current_datamodel = 0;
 
@@ -133,11 +145,13 @@ public:
                             current_datamodel = memory->read<uintptr_t>(fake_dm_ptr + offsets::FakeDataModelToDataModel);
                         }
 
+                        // DataModel address changed = game switched
                         if (current_datamodel != g_main::datamodel) {
                             util.m_print("tp_handler: DataModel changed! Reinitializing...");
                             clear_pointers();
                             force_rescan_flag = true;
                         }
+                        // DataModel invalid
                         else if (current_datamodel == 0 || current_datamodel < 0x10000) {
                             util.m_print("tp_handler: DataModel invalid!");
                             clear_pointers();
@@ -145,27 +159,32 @@ public:
                         }
                     }
                 }
-
                 // ====== INITIALIZE POINTERS IF NEEDED ======
                 bool needs_init = force_rescan_flag ||
                     g_main::datamodel == 0 ||
                     g_main::localplayer == 0;
 
                 if (needs_init) {
+                    util.m_print("tp_handler: Initializing pointers...");
                     force_rescan_flag = false;
 
-                    reinitialize_game_pointers();
+                    for (int attempt = 0; attempt < 10; attempt++) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-                    if (g_main::datamodel != 0 && g_main::localplayer != 0) {
-                        uint64_t place_id = memory->read<uint64_t>(g_main::datamodel + offsets::PlaceId);
+                        reinitialize_game_pointers();
 
-                        if (place_id != 0) {
+                        if (g_main::datamodel != 0 && g_main::localplayer != 0) {
                             update_cache();
-                            util.m_print("tp_handler: SUCCESS! PlaceId: %llu", place_id);
+                            vars::bss::is_hopping = false;
+                            util.m_print("tp_handler: SUCCESS! Pointers found.");
+                            break;
                         }
-                        else {
-                            clear_pointers();
-                        }
+
+                        util.m_print("tp_handler: Attempt %d/10 failed...", attempt + 1);
+                    }
+
+                    if (g_main::datamodel == 0) {
+                        util.m_print("tp_handler: Failed after 10 attempts!");
                     }
                 }
 
@@ -198,5 +217,4 @@ public:
         running = false;
     }
 };
-
 inline c_tp_handler tp_handler;
