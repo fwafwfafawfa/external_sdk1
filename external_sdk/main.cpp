@@ -1,6 +1,19 @@
 #include "main.hpp"
 #include "handlers/themes/theme.hpp"
+#include "features/example_esp/esp.hpp"  // ADD THIS
 #include "tphandler.hpp" // Add this include
+
+void cleanup()
+{
+    util.m_print("Cleaning up...");
+    c_esp::shutdown();
+
+    if (memory)
+    {
+        delete memory;
+        memory = nullptr;
+    }
+}
 
 void reinitialize_game_pointers()
 {
@@ -66,6 +79,7 @@ void reinitialize_game_pointers()
 
 int main()
 {
+    atexit(cleanup);
     memory = new c_memory("RobloxPlayerBeta.exe");
 
     if (!memory)
