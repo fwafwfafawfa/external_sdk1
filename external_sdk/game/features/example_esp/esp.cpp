@@ -14,11 +14,14 @@
 #include <iomanip>
 #include <algorithm>
 #include <functional>
+#include <unordered_set>
 
+// ==================== STATIC MEMBER DEFINITIONS ====================
 std::vector<WorldPart> c_esp::geometry;
 double c_esp::last_refresh = 0.0;
 std::atomic<bool> c_esp::building{ false };
 std::atomic<bool> c_esp::ready{ false };
+std::atomic<bool> c_esp::shutdown_requested{ false };  // NEW
 std::unordered_map<uintptr_t, std::pair<bool, std::chrono::steady_clock::time_point>> c_esp::vis_cache;
 std::mutex c_esp::geometry_mtx;
 std::mutex c_esp::vis_cache_mtx;
@@ -33,12 +36,21 @@ float vars::bss::stored_vicious_z = 0.0f;
 std::atomic<bool> c_esp::hitbox_thread_running{ false };
 int c_esp::hitbox_processed_count = 0;
 
+// ==================== NEW: Player cache to reduce memory reads ====================
+static std::vector<uintptr_t> s_cached_players;
+static std::mutex s_players_cache_mtx;
+static std::chrono::steady_clock::time_point s_last_players_update;
 
+// ==================== NEW: Thread-local buffer to avoid string allocations ====================
+thread_local static char s_string_buffer[256];
+
+// ==================== HELPER FUNCTIONS ====================
 static inline vector normalize_vec(const vector& v)
 {
     float mag = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
     if (mag < 1e-6f) return { 0.f, 0.f, 0.f };
-    return { v.x / mag, v.y / mag, v.z / mag };
+    float inv_mag = 1.0f / mag;  // OPTIMIZATION: multiply is faster than divide
+    return { v.x * inv_mag, v.y * inv_mag, v.z * inv_mag };
 }
 
 static inline float magnitude_vec(const vector& v)
@@ -60,11 +72,16 @@ static inline bool check_ray_box(const vector& origin, const vector& dir, const 
 
     float tmin = -FLT_MAX, tmax = FLT_MAX;
 
+    // OPTIMIZATION: Use arrays instead of repeated if/else
+    float coords_o[3] = { local_o.x, local_o.y, local_o.z };
+    float coords_d[3] = { dir.x, dir.y, dir.z };
+    float coords_h[3] = { half.x, half.y, half.z };
+
     for (int i = 0; i < 3; i++)
     {
-        float o = (i == 0) ? local_o.x : (i == 1) ? local_o.y : local_o.z;
-        float d = (i == 0) ? dir.x : (i == 1) ? dir.y : dir.z;
-        float h = (i == 0) ? half.x : (i == 1) ? half.y : half.z;
+        float o = coords_o[i];
+        float d = coords_d[i];
+        float h = coords_h[i];
 
         if (std::fabs(d) < 1e-6f)
         {
@@ -73,8 +90,9 @@ static inline bool check_ray_box(const vector& origin, const vector& dir, const 
         }
         else
         {
-            float t1 = (-h - o) / d;
-            float t2 = (h - o) / d;
+            float inv_d = 1.0f / d;  // OPTIMIZATION: compute once
+            float t1 = (-h - o) * inv_d;
+            float t2 = (h - o) * inv_d;
             if (t1 > t2) std::swap(t1, t2);
             if (t1 > tmin) tmin = t1;
             if (t2 < tmax) tmax = t2;
@@ -86,26 +104,126 @@ static inline bool check_ray_box(const vector& origin, const vector& dir, const 
     return (tmin > 0.0f || tmax > 0.0f) && tmin <= dist && tmin <= tmax;
 }
 
-static auto last_time = std::chrono::high_resolution_clock::now();
-static int frame_count = 0;
-static float fps = 0.0f;
-static std::chrono::steady_clock::time_point trigger_fire_time = {};
-static bool trigger_waiting = false;
+static inline bool is_valid_pointer(uintptr_t ptr)
+{
+    if (!ptr) return false;
+    if (ptr < 0x10000) return false;
+    if (ptr > 0x7FFFFFFFFFFF) return false;
+    return true;
+}
+
+// ==================== NEW: Cached player list getter ====================
+static std::vector<uintptr_t> get_cached_players(uintptr_t datamodel)
+{
+    auto now = std::chrono::steady_clock::now();
+
+    std::lock_guard<std::mutex> lock(s_players_cache_mtx);
+
+    // Only refresh every 100ms
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_last_players_update).count();
+    if (elapsed > 100 || s_cached_players.empty())
+    {
+        s_cached_players = core.get_players(datamodel);
+        s_last_players_update = now;
+    }
+
+    return s_cached_players;
+}
+
+// ==================== NEW: Shutdown function to clean up ====================
+void c_esp::shutdown()
+{
+    shutdown_requested = true;
+
+    // Wait for building thread to finish (max 5 seconds)
+    int timeout = 50;
+    while (building && timeout > 0)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        timeout--;
+    }
+
+    // Clear all caches to free memory
+    {
+        std::lock_guard<std::mutex> lk(geometry_mtx);
+        geometry.clear();
+        geometry.shrink_to_fit();  // Actually release the memory
+    }
+    {
+        std::lock_guard<std::mutex> lk(vis_cache_mtx);
+        vis_cache.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lk(tracking_mtx);
+        target_tracking.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lk(s_players_cache_mtx);
+        s_cached_players.clear();
+        s_cached_players.shrink_to_fit();
+    }
+}
+
+// ==================== NEW: Visibility cache cleanup ====================
+void c_esp::cleanup_vis_cache()
+{
+    static std::chrono::steady_clock::time_point last_cleanup;
+    auto now = std::chrono::steady_clock::now();
+
+    // Only cleanup every 5 seconds to avoid overhead
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - last_cleanup).count() < 5)
+        return;
+
+    last_cleanup = now;
+
+    std::lock_guard<std::mutex> vlk(vis_cache_mtx);
+
+    // FIX: Hard limit on cache size to prevent memory leak
+    constexpr size_t MAX_CACHE_SIZE = 200;
+
+    if (vis_cache.size() > MAX_CACHE_SIZE)
+    {
+        // Remove half the cache when it gets too big
+        auto it = vis_cache.begin();
+        size_t to_remove = vis_cache.size() / 2;
+        for (size_t i = 0; i < to_remove && it != vis_cache.end(); i++)
+        {
+            it = vis_cache.erase(it);
+        }
+    }
+
+    // Remove stale entries (older than 1 second)
+    for (auto it = vis_cache.begin(); it != vis_cache.end();)
+    {
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second.second).count() > 1000)
+            it = vis_cache.erase(it);
+        else
+            ++it;
+    }
+}
 
 void c_esp::calculate_fps()
 {
-    // Remove this entire function or leave it empty
+    // Empty - functionality moved inline where needed
 }
 
+// ==================== FIXED: update_world_cache ====================
 void c_esp::update_world_cache()
 {
-    if (building) return;
+    if (building || shutdown_requested) return;  // FIX: Check shutdown
     building = true;
 
     std::thread([]()
         {
             std::vector<WorldPart> parts;
             parts.reserve(3000);
+
+            // FIX: Check shutdown throughout
+            if (shutdown_requested)
+            {
+                building = false;
+                return;
+            }
 
             uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
             if (!workspace)
@@ -118,89 +236,97 @@ void c_esp::update_world_cache()
             }
 
             std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
-            std::vector<uintptr_t> player_models;
+
+            // FIX: Use unordered_set for O(1) lookup instead of O(n) vector search
+            std::unordered_set<uintptr_t> player_models;
+            player_models.reserve(players.size());
             for (auto& p : players)
             {
                 auto m = core.get_model_instance(p);
-                if (m) player_models.push_back(m);
+                if (m) player_models.insert(m);
             }
 
-            std::function<void(uintptr_t)> scan_children = [&](uintptr_t parent)
+            // FIX: Use iterative approach instead of recursive to prevent stack overflow
+            std::vector<uintptr_t> stack;
+            stack.reserve(1000);
+            stack.push_back(workspace);
+
+            while (!stack.empty() && !shutdown_requested)
+            {
+                uintptr_t parent = stack.back();
+                stack.pop_back();
+
+                auto children = core.children(parent);
+                for (auto child : children)
                 {
-                    auto children = core.children(parent);
-                    for (auto child : children)
+                    if (!child || shutdown_requested) continue;
+
+                    std::string class_name = core.get_instance_classname(child);
+
+                    if (class_name == "Part" || class_name == "MeshPart" || class_name == "UnionOperation")
                     {
-                        if (!child) continue;
+                        bool is_player_part = false;
 
-                        std::string class_name = core.get_instance_classname(child);
-
-                        if (class_name == "Part" || class_name == "MeshPart" || class_name == "UnionOperation")
+                        // Check if this part belongs to a player (with depth limit)
+                        uintptr_t check = child;
+                        int depth = 0;
+                        while (check != 0 && depth < 10)  // FIX: Limit depth to prevent infinite loop
                         {
-                            bool is_player_part = false;
-                            for (auto model : player_models)
+                            if (player_models.count(check))
                             {
-                                if (child == model)
-                                {
-                                    is_player_part = true;
-                                    break;
-                                }
-
-                                uintptr_t check = child;
-                                while (check != 0)
-                                {
-                                    uintptr_t parent_check = memory->read<uintptr_t>(check + offsets::Parent);
-                                    if (parent_check == model)
-                                    {
-                                        is_player_part = true;
-                                        break;
-                                    }
-                                    check = parent_check;
-                                }
-                                if (is_player_part) break;
+                                is_player_part = true;
+                                break;
                             }
+                            check = memory->read<uintptr_t>(check + offsets::Parent);
+                            depth++;
+                        }
 
-                            if (!is_player_part)
+                        if (!is_player_part)
+                        {
+                            uintptr_t primitive = memory->read<uintptr_t>(child + offsets::Primitive);
+                            if (primitive >= 0x10000)
                             {
-                                uintptr_t primitive = memory->read<uintptr_t>(child + offsets::Primitive);
-                                if (primitive >= 0x10000)
+                                float transparency = memory->read<float>(primitive + offsets::Transparency);
+                                if (transparency <= 0.9f)
                                 {
-                                    float transparency = memory->read<float>(primitive + offsets::Transparency);
-                                    if (transparency <= 0.9f)
+                                    vector size = memory->read<vector>(primitive + offsets::PartSize);
+                                    float vol = size.x * size.y * size.z;
+                                    if (vol >= 0.5f && vol <= 8000000.0f)
                                     {
-                                        vector size = memory->read<vector>(primitive + offsets::PartSize);
-                                        float vol = size.x * size.y * size.z;
-                                        if (vol >= 0.5f && vol <= 8000000.0f)
-                                        {
-                                            vector pos = memory->read<vector>(primitive + offsets::Position);
-                                            parts.push_back({ pos, size, vol, vol > 10.0f });
-                                        }
+                                        vector pos = memory->read<vector>(primitive + offsets::Position);
+                                        parts.push_back({ pos, size, vol, vol > 10.0f });
                                     }
                                 }
                             }
                         }
-
-                        scan_children(child);
                     }
-                };
 
-            scan_children(workspace);
-
-            {
-                std::lock_guard<std::mutex> lk(c_esp::geometry_mtx);
-                c_esp::geometry = std::move(parts);
+                    // Add children to stack for processing
+                    stack.push_back(child);
+                }
             }
 
+            if (!shutdown_requested)
             {
-                std::lock_guard<std::mutex> lk2(c_esp::vis_cache_mtx);
-                c_esp::vis_cache.clear();
+                {
+                    std::lock_guard<std::mutex> lk(c_esp::geometry_mtx);
+                    c_esp::geometry = std::move(parts);
+                }
+
+                {
+                    std::lock_guard<std::mutex> lk2(c_esp::vis_cache_mtx);
+                    c_esp::vis_cache.clear();
+                }
+
+                ready = true;
             }
 
-            ready = true;
             building = false;
 
         }).detach();
 }
 
+// ==================== FIXED: is_visible ====================
 bool c_esp::is_visible(
     const vector& from,
     const vector& head,
@@ -211,8 +337,6 @@ bool c_esp::is_visible(
     uintptr_t target_model
 )
 {
-    // FIX 1: If map isn't ready, return FALSE (Blocked/Not Visible)
-    // This stops shooting through walls when joining or laggy
     if (!ready) return false;
 
     std::vector<WorldPart> local_geometry;
@@ -221,8 +345,6 @@ bool c_esp::is_visible(
         local_geometry = geometry;
     }
 
-    // FIX 2: If no geometry found, return FALSE.
-    // Better to not shoot than to shoot through a wall and get banned.
     if (local_geometry.empty()) return false;
 
     // Cache check
@@ -234,7 +356,7 @@ bool c_esp::is_visible(
         {
             auto age = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - it->second.second).count();
-            if (age < 50) return it->second.first; // Reduced cache time for accuracy
+            if (age < 50) return it->second.first;
         }
     }
 
@@ -300,44 +422,36 @@ bool c_esp::is_visible(
     {
         std::lock_guard<std::mutex> vlk(vis_cache_mtx);
         vis_cache[target_model] = { result, std::chrono::steady_clock::now() };
-
-        if (vis_cache.size() > 100)
-        {
-            auto now = std::chrono::steady_clock::now();
-            for (auto it = vis_cache.begin(); it != vis_cache.end();)
-            {
-                if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second.second).count() > 1000)
-                    it = vis_cache.erase(it);
-                else
-                    ++it;
-            }
-        }
     }
+
+    // FIX: Call cleanup periodically instead of inline
+    cleanup_vis_cache();
 
     return result;
 }
 
+// ==================== FIXED: run_players ====================
 void c_esp::run_players(view_matrix_t viewmatrix)
 {
     if (vars::esp::show_fps)
-        if (vars::esp::show_fps)
+    {
+        uintptr_t task_scheduler = memory->read<uintptr_t>(offsets::TaskSchedulerPointer);
+        if (task_scheduler)
         {
-            uintptr_t task_scheduler = memory->read<uintptr_t>(offsets::TaskSchedulerPointer);
-            if (task_scheduler)
-            {
-                // Read the frame delta time (usually around offset 0x1A0-0x1C0)
-                // Or read the FPS cap and assume it's close to that
-                float fps_cap = memory->read<float>(task_scheduler + offsets::TaskSchedulerMaxFPS);
-
-                std::stringstream ss_fps;
-                ss_fps << "FPS: " << std::fixed << std::setprecision(0) << fps_cap;
-                draw.outlined_string(ImVec2(10, 10), ss_fps.str().c_str(), ImColor(0, 255, 0, 255), ImColor(0, 0, 0, 255), false);
-            }
+            float fps_cap = memory->read<float>(task_scheduler + offsets::TaskSchedulerMaxFPS);
+            // FIX: Use snprintf instead of stringstream to avoid allocation
+            snprintf(s_string_buffer, sizeof(s_string_buffer), "FPS: %.0f", fps_cap);
+            draw.outlined_string(ImVec2(10, 10), s_string_buffer, ImColor(0, 255, 0, 255), ImColor(0, 0, 0, 255), false);
         }
+    }
 
+    // FIX: Use cached players instead of calling get_players every frame
+    std::vector<uintptr_t> players = get_cached_players(g_main::datamodel);
 
+    // Cache screen dimensions once
+    const int screen_width = core.get_screen_width();
+    const int screen_height = core.get_screen_height();
 
-    std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
     for (auto& player : players)
     {
         if (!player || player == g_main::localplayer)
@@ -414,12 +528,10 @@ void c_esp::run_players(view_matrix_t viewmatrix)
 
         if (vars::esp::show_tracers)
         {
-            int screen_width = core.get_screen_width();
-            int screen_height = core.get_screen_height();
-            draw.line(ImVec2(screen_width * 0.5f, screen_height), ImVec2(s_foot_pos.x, s_foot_pos.y), vars::esp::esp_tracer_color, 1.0f);
+            draw.line(ImVec2(screen_width * 0.5f, (float)screen_height), ImVec2(s_foot_pos.x, s_foot_pos.y), vars::esp::esp_tracer_color, 1.0f);
         }
 
-        float health_percent = max(min(health / max_health, 1.0f), 0.0f);
+        float health_percent = fmaxf(fminf(health / max_health, 1.0f), 0.0f);
         ImColor health_color = ImColor(
             static_cast<int>(255 * (1.0f - health_percent)),
             static_cast<int>(255 * health_percent),
@@ -445,9 +557,9 @@ void c_esp::run_players(view_matrix_t viewmatrix)
 
         if (vars::esp::show_health)
         {
-            std::stringstream ss_health;
-            ss_health << "[HP: " << std::fixed << std::setprecision(0) << health << "]";
-            draw.outlined_string(ImVec2(s_foot_pos.x, s_foot_pos.y + 5), ss_health.str().c_str(), health_color, ImColor(0, 0, 0, 255), true);
+            // FIX: Use snprintf instead of stringstream
+            snprintf(s_string_buffer, sizeof(s_string_buffer), "[HP: %.0f]", health);
+            draw.outlined_string(ImVec2(s_foot_pos.x, s_foot_pos.y + 5), s_string_buffer, health_color, ImColor(0, 0, 0, 255), true);
         }
 
         if (vars::esp::show_distance)
@@ -470,9 +582,9 @@ void c_esp::run_players(view_matrix_t viewmatrix)
                             powf(w_player_root.y - w_local_player_root.y, 2) +
                             powf(w_player_root.z - w_local_player_root.z, 2)
                         );
-                        std::stringstream ss_distance;
-                        ss_distance << "[" << std::fixed << std::setprecision(0) << distance << "m]";
-                        draw.outlined_string(ImVec2(s_foot_pos.x, s_foot_pos.y + 20), ss_distance.str().c_str(), vars::esp::esp_distance_color, ImColor(0, 0, 0, 255), true);
+                        // FIX: Use snprintf instead of stringstream
+                        snprintf(s_string_buffer, sizeof(s_string_buffer), "[%.0fm]", distance);
+                        draw.outlined_string(ImVec2(s_foot_pos.x, s_foot_pos.y + 20), s_string_buffer, vars::esp::esp_distance_color, ImColor(0, 0, 0, 255), true);
                     }
                 }
             }
@@ -522,12 +634,11 @@ void c_esp::run_players(view_matrix_t viewmatrix)
     }
 }
 
+// ==================== UNCHANGED: run_aimbot (your original with minor fixes) ====================
 void c_esp::run_aimbot(view_matrix_t viewmatrix)
 {
-    // Safety checks at start
     if (!g_main::datamodel || !g_main::localplayer) return;
-    if (!g_main::datamodel) return;
-    if (!g_main::localplayer) return;
+
     // Cache update
     static auto last_cache_update = std::chrono::high_resolution_clock::now();
     auto now_time = std::chrono::high_resolution_clock::now();
@@ -537,26 +648,19 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         last_cache_update = now_time;
     }
 
-    // Get players
-    std::vector<uintptr_t> players;
-    {
-        std::lock_guard<std::mutex> lock(c_esp::players_mtx);
-        players = core.get_players(g_main::datamodel);
-    }
+    // FIX: Use cached players
+    std::vector<uintptr_t> players = get_cached_players(g_main::datamodel);
 
-    // Screen center
     vector2d crosshair_pos = {
         static_cast<float>(core.get_screen_width() / 2),
         static_cast<float>(core.get_screen_height() / 2)
     };
 
-    // Draw FOV circle
     if (vars::aimbot::show_fov_circle)
     {
         draw.circle(ImVec2(crosshair_pos.x, crosshair_pos.y), vars::aimbot::fov, ImColor(255, 255, 255, 255), 1.0f);
     }
 
-    // Check if aimbot/triggerbot active
     bool aimbot_active = vars::aimbot::toggled && GetAsyncKeyState(vars::aimbot::activation_key);
     bool triggerbot_active = vars::triggerbot::toggled && GetAsyncKeyState(vars::triggerbot::activation_key);
 
@@ -568,11 +672,9 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         this->smoothed_delta_y = 0.0f;
         this->locked_target = 0;
         this->last_target_pos = { 0, 0, 0 };
-        trigger_waiting = false;
         return;
     }
 
-    // Get camera
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     uintptr_t camera = core.find_first_child_class(workspace, "Camera");
     vector cam_pos = {};
@@ -582,7 +684,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
     uintptr_t current_target = 0;
     uintptr_t current_target_model = 0;
 
-    // ========== STICKY AIM - Keep locked target if valid ==========
+    // STICKY AIM
     if (vars::aimbot::sticky_aim && this->locked_target != 0 && aimbot_active)
     {
         bool locked_target_still_valid = false;
@@ -590,7 +692,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         {
             if (player == this->locked_target)
             {
-                // Team check
                 if (vars::aimbot::ignore_teammates)
                 {
                     uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
@@ -609,7 +710,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                     {
                         float health = memory->read<float>(humanoid + offsets::Health);
 
-                        // Unlock on death check
                         if (vars::aimbot::unlock_on_death && health <= 0.0f)
                         {
                             this->locked_target = 0;
@@ -618,7 +718,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
                         if (health > 0.0f)
                         {
-                            // Get target bone based on settings
                             const char* target_bone_name = get_target_bone_name(model, player);
                             auto target_bone = core.find_first_child(model, target_bone_name);
 
@@ -632,12 +731,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
                                     if (core.world_to_screen(w_target_bone_pos, s_target_bone_pos, viewmatrix))
                                     {
-                                        float distance = sqrtf(
-                                            powf(s_target_bone_pos.x - crosshair_pos.x, 2) +
-                                            powf(s_target_bone_pos.y - crosshair_pos.y, 2)
-                                        );
-
-                                        // Keep locked even if out of FOV when sticky aim is on
                                         locked_target_still_valid = true;
                                         current_target = this->locked_target;
                                         current_target_model = model;
@@ -655,7 +748,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             this->locked_target = 0;
     }
 
-    // ========== FIND NEW TARGET ==========
+    // FIND NEW TARGET
     if (this->locked_target == 0 || !vars::aimbot::sticky_aim)
     {
         uintptr_t new_closest_player = 0;
@@ -736,7 +829,8 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             if (aimbot_active && !this->locked_target) this->locked_target = new_closest_player;
         }
     }
-    // ========== AIM AT TARGET ==========
+
+    // AIM AT TARGET
     if (current_target && current_target_model)
     {
         auto model = current_target_model;
@@ -744,14 +838,12 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         auto p_player_root = memory->read<uintptr_t>(player_root + offsets::Primitive);
         vector v_player_root = memory->read<vector>(p_player_root + offsets::Velocity);
 
-        // Check if target is jumping (for air part)
         bool is_jumping = false;
         if (vars::aimbot::air_part_enabled)
         {
             is_jumping = v_player_root.y > 5.0f;
         }
 
-        // Get target bone (air part or regular)
         const char* target_bone_name;
         if (is_jumping && vars::aimbot::air_part_enabled)
         {
@@ -778,7 +870,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
         vector w_target_bone_pos = memory->read<vector>(p_target_bone + offsets::Position);
 
-        // ========== ANTI-FLICK ==========
+        // ANTI-FLICK
         if (vars::aimbot::anti_flick && this->last_target_pos.x != 0)
         {
             float jump_distance = sqrtf(
@@ -789,7 +881,6 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
             if (jump_distance > vars::aimbot::anti_flick_distance)
             {
-                // Target teleported, unlock and skip this frame
                 this->locked_target = 0;
                 this->last_target_pos = w_target_bone_pos;
                 reset_aim_state();
@@ -798,13 +889,13 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
         }
         this->last_target_pos = w_target_bone_pos;
 
-        // ========== PREDICTION ==========
+        // PREDICTION
         if (vars::aimbot::prediction)
         {
             w_target_bone_pos = predict_position(w_target_bone_pos, v_player_root, cam_pos);
         }
 
-        // ========== SHAKE (Humanization) ==========
+        // SHAKE
         if (vars::aimbot::shake)
         {
             static std::random_device rd;
@@ -821,13 +912,11 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
             float delta_x = s_target_bone_pos.x - crosshair_pos.x;
             float delta_y = s_target_bone_pos.y - crosshair_pos.y;
 
-            // ========== TRIGGERBOT ==========
             if (triggerbot_active)
             {
                 run_triggerbot(model, p_player_root, delta_x, delta_y, cam_pos, w_target_bone_pos);
             }
 
-            // ========== AIMBOT MOVEMENT ==========
             if (aimbot_active)
             {
                 perform_aim(delta_x, delta_y, s_target_bone_pos.x, s_target_bone_pos.y);
@@ -841,11 +930,10 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
     else
     {
         reset_aim_state();
-        trigger_waiting = false;
     }
 }
 
-// ========== HELPER FUNCTIONS ==========
+// ==================== YOUR REMAINING FUNCTIONS (unchanged) ====================
 
 const char* c_esp::get_target_bone_name(uintptr_t model, uintptr_t player)
 {
@@ -861,7 +949,7 @@ const char* c_esp::get_target_bone_name(uintptr_t model, uintptr_t player)
 
 const char* c_esp::get_closest_part_name(uintptr_t model)
 {
-    if (!model) return "Head"; // Safety check
+    if (!model) return "Head";
     const char* parts[] = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftHand", "RightHand", "LeftFoot", "RightFoot" };
     const char* fallback_parts[] = { "Head", "HumanoidRootPart", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" };
 
@@ -873,7 +961,6 @@ const char* c_esp::get_closest_part_name(uintptr_t model)
     float best_dist = FLT_MAX;
     const char* best_part = "Head";
 
-    // Try R15 parts first
     for (int i = 0; i < 8; i++)
     {
         auto part = core.find_first_child(model, parts[i]);
@@ -899,7 +986,6 @@ const char* c_esp::get_closest_part_name(uintptr_t model)
         }
     }
 
-    // Try R6 parts if no R15 found
     if (best_dist == FLT_MAX)
     {
         for (int i = 0; i < 7; i++)
@@ -941,28 +1027,23 @@ vector c_esp::predict_position(vector current_pos, vector velocity, vector cam_p
 {
     vector predicted = current_pos;
 
-    // Safety check for bad values
     if (isnan(velocity.x) || isnan(velocity.y) || isnan(velocity.z))
         return current_pos;
 
     if (vars::aimbot::prediction_x <= 0.0f)
         return current_pos;
 
-    // Calculate distance for scaling
     float dx = current_pos.x - cam_pos.x;
     float dy = current_pos.y - cam_pos.y;
     float dz = current_pos.z - cam_pos.z;
     float distance = sqrtf(dx * dx + dy * dy + dz * dz);
 
-    // Scale prediction by distance (further = more prediction)
     float distance_scale = distance / 50.0f;
     distance_scale = fmaxf(0.5f, fminf(distance_scale, 2.0f));
 
-    // Apply prediction with separate X/Y divisors
     predicted.x += (velocity.x / vars::aimbot::prediction_x) * distance_scale;
     predicted.z += (velocity.z / vars::aimbot::prediction_x) * distance_scale;
 
-    // Only predict Y if not ignored
     if (!vars::aimbot::prediction_ignore_y)
     {
         predicted.y += (velocity.y / vars::aimbot::prediction_y) * distance_scale;
@@ -1029,20 +1110,17 @@ float c_esp::apply_easing(float t, int style)
 
     switch (style)
     {
-    case 0: return t; // None
-    case 1: return t; // Linear
-    case 2: return t * t; // EaseIn
-    case 3: return t * (2.0f - t); // EaseOut
-    case 4: return (t < 0.5f) ? (2.0f * t * t) : (1.0f - powf(-2.0f * t + 2.0f, 2.0f) / 2.0f); // EaseInOut
+    case 0: return t;
+    case 1: return t;
+    case 2: return t * t;
+    case 3: return t * (2.0f - t);
+    case 4: return (t < 0.5f) ? (2.0f * t * t) : (1.0f - powf(-2.0f * t + 2.0f, 2.0f) / 2.0f);
     default: return t;
     }
 }
 
 bool c_esp::is_visible(const vector& from, const vector& to, uintptr_t target_model)
 {
-    // Redirects to the main visibility check
-    // We pass 'to' (the target position) as the head, torso, etc.
-    // This is a simplified check for triggerbot
     return is_visible(from, to, to, to, to, to, target_model);
 }
 
@@ -1051,6 +1129,8 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
     static bool trigger_mouse_down = false;
     static std::chrono::steady_clock::time_point trigger_release_time;
     static std::chrono::steady_clock::time_point last_fire_time;
+    static bool trigger_waiting = false;
+    static std::chrono::steady_clock::time_point trigger_fire_time;
 
     auto now = std::chrono::steady_clock::now();
 
@@ -1154,18 +1234,6 @@ void c_esp::run_triggerbot(uintptr_t model, uintptr_t p_player_root, float delta
     trigger_release_time = now + std::chrono::milliseconds(vars::triggerbot::hold_time);
     last_fire_time = now;
     trigger_waiting = false;
-
-    // ========== RATE LIMIT (prevent spam) ==========
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_fire_time).count() < 50) return;
-    if (time_since_last < 50) // Minimum 50ms between shots
-        return;
-
-    // ========== FIRE! ==========
-    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-    trigger_mouse_down = true;
-    trigger_release_time = now + std::chrono::milliseconds(vars::triggerbot::hold_time);
-    last_fire_time = now;
-    trigger_waiting = false;
 }
 
 void c_esp::reset_aim_state()
@@ -1184,7 +1252,7 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
     if (!g_main::datamodel || !g_main::localplayer)
         return;
 
-    std::vector<uintptr_t> players = core.get_players(g_main::datamodel);
+    std::vector<uintptr_t> players = get_cached_players(g_main::datamodel);
 
     for (uintptr_t player : players)
     {
@@ -1207,15 +1275,12 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
         uintptr_t primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
         if (!primitive) continue;
 
-        // Get HRP position
         vector hrp_pos = memory->read<vector>(primitive + offsets::Position);
 
-        // Get hitbox size
         float size_x = vars::combat::hitbox_size_x;
         float size_y = vars::combat::hitbox_size_y;
         float size_z = vars::combat::hitbox_size_z;
 
-        // Calculate 8 corners of the hitbox
         vector corners[8] = {
             { hrp_pos.x - size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
             { hrp_pos.x + size_x / 2, hrp_pos.y - size_y / 2, hrp_pos.z - size_z / 2 },
@@ -1227,7 +1292,6 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
             { hrp_pos.x - size_x / 2, hrp_pos.y + size_y / 2, hrp_pos.z + size_z / 2 }
         };
 
-        // Convert to screen coordinates
         vector2d screen_corners[8];
         bool all_visible = true;
 
@@ -1242,22 +1306,18 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
 
         if (!all_visible) continue;
 
-        ImColor hitbox_color = ImColor(255, 0, 0, 150);  // Red, semi-transparent
+        ImColor hitbox_color = ImColor(255, 0, 0, 150);
 
-        // Draw 12 edges of the box
-        // Bottom face
         draw.line(ImVec2(screen_corners[0].x, screen_corners[0].y), ImVec2(screen_corners[1].x, screen_corners[1].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[1].x, screen_corners[1].y), ImVec2(screen_corners[2].x, screen_corners[2].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[2].x, screen_corners[2].y), ImVec2(screen_corners[3].x, screen_corners[3].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[3].x, screen_corners[3].y), ImVec2(screen_corners[0].x, screen_corners[0].y), hitbox_color, 1.0f);
 
-        // Top face
         draw.line(ImVec2(screen_corners[4].x, screen_corners[4].y), ImVec2(screen_corners[5].x, screen_corners[5].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[5].x, screen_corners[5].y), ImVec2(screen_corners[6].x, screen_corners[6].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[6].x, screen_corners[6].y), ImVec2(screen_corners[7].x, screen_corners[7].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[7].x, screen_corners[7].y), ImVec2(screen_corners[4].x, screen_corners[4].y), hitbox_color, 1.0f);
 
-        // Vertical edges
         draw.line(ImVec2(screen_corners[0].x, screen_corners[0].y), ImVec2(screen_corners[4].x, screen_corners[4].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[1].x, screen_corners[1].y), ImVec2(screen_corners[5].x, screen_corners[5].y), hitbox_color, 1.0f);
         draw.line(ImVec2(screen_corners[2].x, screen_corners[2].y), ImVec2(screen_corners[6].x, screen_corners[6].y), hitbox_color, 1.0f);
@@ -1265,181 +1325,146 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
     }
 }
 
-void c_esp::start_hitbox_thread() {
-    if (!c_esp::hitbox_thread_running) {
-        std::thread(c_esp::hitbox_expander_thread).detach();
-        c_esp::hitbox_thread_running = true;
-    }
-}
-
-static bool is_valid_pointer(uintptr_t ptr)
+void c_esp::start_hitbox_thread()
 {
-    if (!ptr) return false;
-    if (ptr < 0x10000) return false;
-    if (ptr > 0x7FFFFFFFFFFF) return false;
-    return true;
-}
-
-void c_esp::hitbox_expander_thread()
-{
-    while (true)
+    if (!c_esp::hitbox_thread_running.exchange(true))
     {
-        // Check if enabled
-        if (!vars::combat::hitbox_expander)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            continue;
-        }
-
-        // Validate globals
-        if (!is_valid_pointer(g_main::datamodel))
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            continue;
-        }
-
-        if (!is_valid_pointer(g_main::localplayer))
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            continue;
-        }
-
-        try
-        {
-            // Get players safely
-            std::vector<uintptr_t> players;
-
-            try
+        std::thread([]()
             {
-                players = core.get_players(g_main::datamodel);
-            }
-            catch (...)
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                continue;
-            }
-
-            if (players.empty())
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
-            c_esp::hitbox_processed_count = 0;
-
-            // Pre-calculate size
-            vector newSize = {
-                vars::combat::hitbox_size_x,
-                vars::combat::hitbox_size_y,
-                vars::combat::hitbox_size_z
-            };
-
-            // Validate size values
-            if (newSize.x <= 0.0f || newSize.x > 1000.0f) continue;
-            if (newSize.y <= 0.0f || newSize.y > 1000.0f) continue;
-            if (newSize.z <= 0.0f || newSize.z > 1000.0f) continue;
-
-            for (uintptr_t player : players)
-            {
-                // Validate player pointer
-                if (!is_valid_pointer(player)) continue;
-                if (player == g_main::localplayer) continue;
-
-                // Skip teammates
-                if (vars::combat::hitbox_skip_teammates)
+                while (!shutdown_requested)  // FIX: Check shutdown flag
                 {
+                    if (!vars::combat::hitbox_expander)
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                        continue;
+                    }
+
+                    if (!is_valid_pointer(g_main::datamodel) || !is_valid_pointer(g_main::localplayer))
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                        continue;
+                    }
+
                     try
                     {
-                        uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
-                        if (player_team != 0 && player_team == g_main::localplayer_team)
+                        std::vector<uintptr_t> players = get_cached_players(g_main::datamodel);
+
+                        if (players.empty())
+                        {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
                             continue;
+                        }
+
+                        c_esp::hitbox_processed_count = 0;
+
+                        vector newSize = {
+                            vars::combat::hitbox_size_x,
+                            vars::combat::hitbox_size_y,
+                            vars::combat::hitbox_size_z
+                        };
+
+                        if (newSize.x <= 0.0f || newSize.x > 1000.0f) continue;
+                        if (newSize.y <= 0.0f || newSize.y > 1000.0f) continue;
+                        if (newSize.z <= 0.0f || newSize.z > 1000.0f) continue;
+
+                        for (uintptr_t player : players)
+                        {
+                            if (shutdown_requested) break;  // FIX: Check in loop
+
+                            if (!is_valid_pointer(player)) continue;
+                            if (player == g_main::localplayer) continue;
+
+                            if (vars::combat::hitbox_skip_teammates)
+                            {
+                                try
+                                {
+                                    uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
+                                    if (player_team != 0 && player_team == g_main::localplayer_team)
+                                        continue;
+                                }
+                                catch (...)
+                                {
+                                    continue;
+                                }
+                            }
+
+                            uintptr_t character = 0;
+                            try
+                            {
+                                character = core.get_model_instance(player);
+                            }
+                            catch (...)
+                            {
+                                continue;
+                            }
+
+                            if (!is_valid_pointer(character)) continue;
+
+                            uintptr_t hrp = 0;
+                            try
+                            {
+                                hrp = core.find_first_child(character, "HumanoidRootPart");
+                            }
+                            catch (...)
+                            {
+                                continue;
+                            }
+
+                            if (!is_valid_pointer(hrp)) continue;
+
+                            uintptr_t primitive = 0;
+                            try
+                            {
+                                primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+                            }
+                            catch (...)
+                            {
+                                continue;
+                            }
+
+                            if (!is_valid_pointer(primitive)) continue;
+
+                            try
+                            {
+                                vector currentSize = memory->read<vector>(primitive + offsets::PartSize);
+
+                                if (currentSize.x <= 0.0f || currentSize.x > 1000.0f) continue;
+                                if (currentSize.y <= 0.0f || currentSize.y > 1000.0f) continue;
+                                if (currentSize.z <= 0.0f || currentSize.z > 1000.0f) continue;
+                            }
+                            catch (...)
+                            {
+                                continue;
+                            }
+
+                            try
+                            {
+                                memory->write<vector>(primitive + offsets::PartSize, newSize);
+                                c_esp::hitbox_processed_count++;
+                            }
+                            catch (...)
+                            {
+                                continue;
+                            }
+
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        }
                     }
                     catch (...)
                     {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                         continue;
                     }
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
 
-                // Get character
-                uintptr_t character = 0;
-                try
-                {
-                    character = core.get_model_instance(player);
-                }
-                catch (...)
-                {
-                    continue;
-                }
-
-                if (!is_valid_pointer(character)) continue;
-
-                // Get HumanoidRootPart
-                uintptr_t hrp = 0;
-                try
-                {
-                    hrp = core.find_first_child(character, "HumanoidRootPart");
-                }
-                catch (...)
-                {
-                    continue;
-                }
-
-                if (!is_valid_pointer(hrp)) continue;
-
-                // Get primitive
-                uintptr_t primitive = 0;
-                try
-                {
-                    primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
-                }
-                catch (...)
-                {
-                    continue;
-                }
-
-                if (!is_valid_pointer(primitive)) continue;
-
-                // Validate by reading current size first
-                try
-                {
-                    vector currentSize = memory->read<vector>(primitive + offsets::PartSize);
-
-                    // Check if current size is reasonable (not garbage memory)
-                    if (currentSize.x <= 0.0f || currentSize.x > 1000.0f) continue;
-                    if (currentSize.y <= 0.0f || currentSize.y > 1000.0f) continue;
-                    if (currentSize.z <= 0.0f || currentSize.z > 1000.0f) continue;
-                }
-                catch (...)
-                {
-                    continue;
-                }
-
-                // Write new size
-                try
-                {
-                    memory->write<vector>(primitive + offsets::PartSize, newSize);
-                    c_esp::hitbox_processed_count++;
-                }
-                catch (...)
-                {
-                    continue;
-                }
-
-                // Small delay between players to reduce stress
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-        }
-        catch (...)
-        {
-            // Major error - wait longer
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            continue;
-        }
-
-        // Normal delay between loops
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                hitbox_thread_running = false;  // FIX: Mark as not running when exiting
+            }).detach();
     }
 }
+
+// ==================== BSS FUNCTIONS (unchanged) ====================
 
 void c_esp::server_hop()
 {
@@ -1470,12 +1495,16 @@ void c_esp::server_hop()
 
             for (int i = (int)wait_time; i > 0; i--)
             {
+                if (shutdown_requested) return;  // FIX: Check shutdown
                 util.m_print("[Server Hop] Opening in %d...", i);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             }
 
-            util.m_print("[Server Hop] Opening new game...");
-            system("start roblox://placeId=1537690962");
+            if (!shutdown_requested)
+            {
+                util.m_print("[Server Hop] Opening new game...");
+                system("start roblox://placeId=1537690962");
+            }
 
         }).detach();
 }
@@ -1550,12 +1579,12 @@ void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
             powf(world_pos.z - local_pos.z, 2)
         );
 
-        std::stringstream ss;
-        ss << "VICIOUS BEE [" << std::fixed << std::setprecision(0) << distance << "m]";
+        // FIX: Use snprintf instead of stringstream
+        snprintf(s_string_buffer, sizeof(s_string_buffer), "VICIOUS BEE [%.0fm]", distance);
 
         draw.outlined_string(
             ImVec2(screen_pos.x, screen_pos.y),
-            ss.str().c_str(),
+            s_string_buffer,
             ImColor(255, 0, 0, 255),
             ImColor(0, 0, 0, 255),
             true
@@ -1565,13 +1594,75 @@ void c_esp::run_vicious_esp(view_matrix_t viewmatrix)
         int screen_height = core.get_screen_height();
 
         draw.line(
-            ImVec2(screen_width * 0.5f, screen_height),
+            ImVec2(screen_width * 0.5f, (float)screen_height),
             ImVec2(screen_pos.x, screen_pos.y),
             ImColor(255, 0, 0, 255),
             2.0f
         );
     }
 }
+
+// ... Keep all the remaining BSS functions exactly as they were ...
+// (run_vicious_hunter, float_to_target, find_hive_position, test_hive_claiming,
+//  track_vicious_status, stay_on_vicious, check_vicious_death, get_session_time,
+//  is_server_visited, mark_server_visited, cleanup_old_servers, get_active_blacklist_count,
+//  has_friends_in_server, get_current_job_id)
+
+// I'll include just a couple with the fixes applied:
+
+void c_esp::cleanup_old_servers()
+{
+    static std::chrono::steady_clock::time_point last_cleanup;
+    auto now = std::chrono::steady_clock::now();
+
+    if (std::chrono::duration<float>(now - last_cleanup).count() < 30.0f)
+        return;
+
+    last_cleanup = now;
+
+    // FIX: Add max size limit
+    constexpr size_t MAX_VISITED_SERVERS = 100;
+
+    int removed = 0;
+    auto it = vars::bss::visited_servers.begin();
+    while (it != vars::bss::visited_servers.end())
+    {
+        float elapsed = std::chrono::duration<float>(now - it->visit_time).count();
+
+        if (elapsed > vars::bss::server_blacklist_time ||
+            vars::bss::visited_servers.size() > MAX_VISITED_SERVERS)
+        {
+            it = vars::bss::visited_servers.erase(it);
+            removed++;
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    if (removed > 0)
+    {
+        util.m_print("[Server] Cleaned up %d old servers from blacklist", removed);
+    }
+}
+
+float c_esp::get_session_time()
+{
+    static auto session_start = std::chrono::steady_clock::now();
+    static bool initialized = false;
+
+    if (!initialized)
+    {
+        session_start = std::chrono::steady_clock::now();
+        initialized = true;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration<float>(now - session_start).count();
+}
+
+// ... Include the rest of your BSS functions unchanged ...
 
 void c_esp::run_vicious_hunter()
 {
@@ -2419,21 +2510,6 @@ void c_esp::check_vicious_death()
     }
 }
 
-float c_esp::get_session_time()
-{
-    static auto session_start = std::chrono::steady_clock::now();
-    static bool initialized = false;
-
-    if (!initialized)
-    {
-        session_start = std::chrono::steady_clock::now();
-        initialized = true;
-    }
-
-    auto now = std::chrono::steady_clock::now();
-    return std::chrono::duration<float>(now - session_start).count();
-}
-
 bool c_esp::is_server_visited(const std::string& job_id)
 {
     if (job_id.empty()) return false;
@@ -2497,39 +2573,6 @@ void c_esp::mark_server_visited()
 }
 
 // Add a function to clean up old servers periodically
-void c_esp::cleanup_old_servers()
-{
-    static std::chrono::steady_clock::time_point last_cleanup;
-    auto now = std::chrono::steady_clock::now();
-
-    // Clean up every 30 seconds
-    if (std::chrono::duration<float>(now - last_cleanup).count() < 30.0f)
-        return;
-
-    last_cleanup = now;
-
-    int removed = 0;
-    auto it = vars::bss::visited_servers.begin();
-    while (it != vars::bss::visited_servers.end())
-    {
-        float elapsed = std::chrono::duration<float>(now - it->visit_time).count();
-
-        if (elapsed > vars::bss::server_blacklist_time)
-        {
-            it = vars::bss::visited_servers.erase(it);
-            removed++;
-        }
-        else
-        {
-            ++it;
-        }
-    }
-
-    if (removed > 0)
-    {
-        util.m_print("[Server] Cleaned up %d old servers from blacklist", removed);
-    }
-}
 
 // Optional: Get active blacklist count
 int c_esp::get_active_blacklist_count()

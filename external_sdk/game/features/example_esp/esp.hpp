@@ -76,6 +76,9 @@ public:
     bool has_friends_in_server();
     void cleanup_old_servers();  // Add this
     int get_active_blacklist_count();  // And this
+    static std::atomic<bool> shutdown_requested;
+    static void shutdown();
+    static void cleanup_vis_cache();
 
     bool is_visible(const vector& from, const vector& to, uintptr_t target_model);
     bool is_visible(const vector& from, const vector& head, const vector& torso, const vector& pelvis, const vector& left_foot, const vector& right_foot, uintptr_t target_model);
