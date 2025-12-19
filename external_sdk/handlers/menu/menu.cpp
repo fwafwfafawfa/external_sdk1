@@ -446,6 +446,24 @@ void c_menu::run_main_window()
 
             ImGui::Text("Status");
             ImGui::Text("Servers Checked: %d", vars::bss::servers_checked);
+            ImGui::Text("Kills: %d", vars::bss::vicious_kills);
+
+            // Declare these only ONCE
+            float session_time = esp.get_session_time();
+            int mins = (int)(session_time / 60);
+            int secs = (int)session_time % 60;
+            ImGui::Text("Session Time: %02d:%02d", mins, secs);
+
+            int active_blacklist = esp.get_active_blacklist_count();
+            ImGui::Text("Blacklisted Servers: %d", active_blacklist);
+
+            // REMOVED duplicate declarations of session_time, mins, secs here
+
+            if (ImGui::Button("Clear Blacklist"))
+            {
+                vars::bss::visited_servers.clear();
+                util.m_print("[Server] Cleared server blacklist");
+            }
 
             if (vars::bss::going_to_hive)
             {

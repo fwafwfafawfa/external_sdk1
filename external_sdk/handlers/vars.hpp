@@ -4,6 +4,8 @@
 #include "../addons/imgui/imgui.h" // Corrected Include ImGui for ImColor
 #include <cmath> // For sqrtf
 #include <string> // Required for std::string
+#include <chrono>
+#include <vector>
 
 // Define 
 // and CFrame structs first
@@ -175,6 +177,13 @@ namespace vars
 
     namespace bss
     {
+        struct ServerEntry {
+            std::string job_id;
+            std::chrono::steady_clock::time_point visit_time;
+        };
+
+        inline std::vector<std::string> blacklisted_friends;
+        inline char friend_input_buffer[64] = "";
         inline bool vicious_hunter = false;
         inline bool vicious_found = false;
         inline bool is_hopping = false;
@@ -182,6 +191,10 @@ namespace vars
         inline int servers_checked = 0;
         inline float check_delay = 5.0f;
         inline float server_load_delay = 15.0f;
+        inline std::vector<ServerEntry> visited_servers;  // Changed from vector<string>
+        inline std::string current_job_id = "";
+        inline bool avoid_friends = true;
+        inline float server_blacklist_time = 300.0f; // 5 minutes default
         
         inline bool auto_teleport = false;
         inline bool float_to_vicious = false;
@@ -204,6 +217,13 @@ namespace vars
         extern float stored_vicious_y;
         extern float stored_vicious_z;
         inline bool test_hive_claim = false;
+        inline int vicious_kills = 0;
+        inline float session_start_time = 0;
+        inline bool session_active = false;
+
+        // Vicious tracking
+        inline bool vicious_alive = false;
+        inline bool tracking_vicious = false;
     }
 
     namespace anti_afk

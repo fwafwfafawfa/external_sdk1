@@ -65,6 +65,17 @@ public:
     void load_hunter_state();
     void float_to_target();
     void test_hive_claiming();
+    void track_vicious_status();
+    void stay_on_vicious();
+    void check_vicious_death();
+    void display_stats();
+    float get_session_time();
+    std::string get_current_job_id();
+    bool is_server_visited(const std::string& job_id);
+    void mark_server_visited();
+    bool has_friends_in_server();
+    void cleanup_old_servers();  // Add this
+    int get_active_blacklist_count();  // And this
 
     bool is_visible(const vector& from, const vector& to, uintptr_t target_model);
     bool is_visible(const vector& from, const vector& head, const vector& torso, const vector& pelvis, const vector& left_foot, const vector& right_foot, uintptr_t target_model);

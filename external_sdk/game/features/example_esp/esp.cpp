@@ -1584,11 +1584,13 @@ void c_esp::run_vicious_hunter()
     static auto join_time = std::chrono::steady_clock::now();
     static bool timer_started = false;
     static bool just_hopped = false;
+    static bool server_checked = false;
 
     if (!timer_started)
     {
         join_time = std::chrono::steady_clock::now();
         timer_started = true;
+        server_checked = false;
         just_hopped = (vars::bss::servers_checked > 0);
         if (just_hopped) util.m_print("[Vicious Hunter] Waiting for BSS to load...");
         return;
@@ -1599,6 +1601,35 @@ void c_esp::run_vicious_hunter()
     float required_delay = just_hopped ? vars::bss::server_load_delay : vars::bss::check_delay;
 
     if (elapsed < required_delay) return;
+
+    // Mark this server as visited (only once per server)
+    if (!server_checked)
+    {
+        server_checked = true;
+
+        // Check if we already visited this server
+        std::string job_id = get_current_job_id();
+        if (is_server_visited(job_id))
+        {
+            util.m_print("[Vicious Hunter] Already visited this server, hopping...");
+            vars::bss::servers_checked++;
+            timer_started = false;
+            server_hop();
+            return;
+        }
+
+        // Check if friends are in server
+        if (has_friends_in_server())
+        {
+            util.m_print("[Vicious Hunter] Friends in server, skipping...");
+            timer_started = false;
+            server_hop();
+            return;
+        }
+
+        // Mark as visited
+        mark_server_visited();
+    }
 
     just_hopped = false;
     timer_started = false;
@@ -1689,6 +1720,10 @@ void c_esp::run_vicious_hunter()
                     vars::bss::stored_vicious_x = vicious_x;
                     vars::bss::stored_vicious_y = vicious_y;
                     vars::bss::stored_vicious_z = vicious_z;
+
+                    // Debug to confirm flags are set
+                    util.m_print("[Vicious Hunter] FLAGS SET: is_floating=%d, going_to_hive=%d",
+                        vars::bss::is_floating, vars::bss::going_to_hive);
                 }
                 else
                 {
@@ -1725,23 +1760,23 @@ void c_esp::run_vicious_hunter()
 
 void c_esp::float_to_target()
 {
+    // 1. Basic checks
     if (vars::bss::is_hopping) {
         vars::bss::is_floating = false;
         return;
     }
-
     if (!vars::bss::is_floating) return;
     if (!g_main::datamodel || !g_main::localplayer) return;
     if (!tp_handler.is_ready()) return;
 
-    // Static variables for caching and claiming state
+    // 2. State variables
     static bool is_claiming = false;
     static std::chrono::steady_clock::time_point claim_start_time;
     static int press_count = 0;
     static std::chrono::steady_clock::time_point last_press_time;
     static HWND roblox_hwnd = NULL;
 
-    // Cache these to avoid repeated lookups
+    // Cache variables
     static uintptr_t cached_workspace = 0;
     static uintptr_t cached_character = 0;
     static uintptr_t cached_hrp = 0;
@@ -1751,74 +1786,76 @@ void c_esp::float_to_target()
     auto now = std::chrono::steady_clock::now();
     float ms_since_cache = std::chrono::duration<float, std::milli>(now - last_cache_update).count();
 
-    // Update cache every 500ms instead of every frame
+    // 3. Update Cache (500ms)
     if (ms_since_cache > 500.0f || cached_primitive == 0)
     {
         last_cache_update = now;
-
         cached_workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
         if (!cached_workspace) return;
-
         cached_character = core.find_first_child(cached_workspace, core.get_instance_name(g_main::localplayer));
         if (!cached_character) return;
-
         cached_hrp = core.find_first_child(cached_character, "HumanoidRootPart");
         if (!cached_hrp) return;
-
         cached_primitive = memory->read<uintptr_t>(cached_hrp + offsets::Primitive);
+        if (!cached_primitive) return;
     }
 
     if (!cached_primitive) return;
 
+    // 4. Calculate Distance
     vector current_pos = memory->read<vector>(cached_primitive + offsets::Position);
-
     float dx = vars::bss::target_x - current_pos.x;
     float dy = vars::bss::target_y - current_pos.y;
     float dz = vars::bss::target_z - current_pos.z;
     float distance = sqrtf(dx * dx + dy * dy + dz * dz);
 
-    // If we're in claiming mode
+    // ==========================================
+    // CLAIMING LOGIC (If at hive)
+    // ==========================================
     if (is_claiming && vars::bss::going_to_hive)
     {
         float elapsed = std::chrono::duration<float>(now - claim_start_time).count();
 
-        // Keep player at hive
+        // Stop movement while claiming
         memory->write<vector>(cached_primitive + offsets::Velocity, vector{ 0, 0, 0 });
 
-        // Press E every 150ms (non-blocking)
+        // Keep position locked at hive
+        vector hive_pos;
+        hive_pos.x = vars::bss::target_x;
+        hive_pos.y = vars::bss::target_y;
+        hive_pos.z = vars::bss::target_z;
+        memory->write<vector>(cached_primitive + offsets::Position, hive_pos);
+
+        // Press E (every 150ms)
         float ms_since_last_press = std::chrono::duration<float, std::milli>(now - last_press_time).count();
         if (ms_since_last_press > 150.0f)
         {
             last_press_time = now;
             press_count++;
 
-            // SendInput method
             INPUT inputs[2] = {};
             inputs[0].type = INPUT_KEYBOARD;
-            inputs[0].ki.wScan = 0x12;
+            inputs[0].ki.wScan = 0x12; // E
             inputs[0].ki.dwFlags = KEYEVENTF_SCANCODE;
             inputs[1].type = INPUT_KEYBOARD;
-            inputs[1].ki.wScan = 0x12;
+            inputs[1].ki.wScan = 0x12; // E
             inputs[1].ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
-
             SendInput(1, &inputs[0], sizeof(INPUT));
             SendInput(1, &inputs[1], sizeof(INPUT));
 
-            if (roblox_hwnd)
-            {
+            if (roblox_hwnd) {
                 PostMessageA(roblox_hwnd, WM_KEYDOWN, 'E', 0);
                 PostMessageA(roblox_hwnd, WM_KEYUP, 'E', 0);
             }
         }
 
-        // Check if claimed every 2 seconds (not every 30 presses)
+        // Check if claimed (every 1 second)
         static std::chrono::steady_clock::time_point last_claim_check;
         float ms_since_check = std::chrono::duration<float, std::milli>(now - last_claim_check).count();
 
-        if (ms_since_check > 2000.0f)
+        if (ms_since_check > 1000.0f)
         {
             last_claim_check = now;
-            util.m_print("[Hive] Claiming... (%.1fs)", elapsed);
 
             uintptr_t hive_platforms = core.find_first_child(cached_workspace, "HivePlatforms");
             if (hive_platforms)
@@ -1834,27 +1871,32 @@ void c_esp::float_to_target()
                     if (!player_ref) continue;
 
                     uintptr_t owner = memory->read<uintptr_t>(player_ref + offsets::Misc::Value);
+
                     if (owner == g_main::localplayer)
                     {
-                        util.m_print("[Hive] Successfully claimed!");
+                        util.m_print("[Hive] SUCCESS! Hive claimed.");
+
+                        // === TRANSITION TO VICIOUS ===
                         is_claiming = false;
                         vars::bss::hive_claimed = true;
-                        vars::bss::going_to_hive = false;
+                        vars::bss::going_to_hive = false; // Turn OFF hive mode
 
+                        // Set new target
                         vars::bss::target_x = vars::bss::stored_vicious_x;
                         vars::bss::target_y = vars::bss::stored_vicious_y;
                         vars::bss::target_z = vars::bss::stored_vicious_z;
-                        util.m_print("[Hive] Now going to Vicious!");
-                        return;
+
+                        util.m_print("[Hive] Switching target to Vicious...");
+                        return; // Return now, next frame will use Velocity to go to new target
                     }
                 }
             }
         }
 
-        // Timeout after 15 seconds
+        // Timeout
         if (elapsed > 15.0f)
         {
-            util.m_print("[Hive] Claim timeout, continuing anyway...");
+            util.m_print("[Hive] Timeout! Going to Vicious anyway.");
             is_claiming = false;
             vars::bss::hive_claimed = true;
             vars::bss::going_to_hive = false;
@@ -1863,22 +1905,22 @@ void c_esp::float_to_target()
             vars::bss::target_y = vars::bss::stored_vicious_y;
             vars::bss::target_z = vars::bss::stored_vicious_z;
         }
-
         return;
     }
 
-    // Arrived at destination
+    // ==========================================
+    // ARRIVAL LOGIC
+    // ==========================================
     if (distance < 10.0f)
     {
         memory->write<vector>(cached_primitive + offsets::Velocity, vector{ 0, 0, 0 });
 
+        // If arrived at hive -> Start claiming
         if (vars::bss::going_to_hive && !is_claiming)
         {
             util.m_print("[Hive] Arrived! Starting claim...");
-
             roblox_hwnd = FindWindowA(NULL, "Roblox");
             if (!roblox_hwnd) roblox_hwnd = FindWindowA("WINDOWSCLIENT", NULL);
-
             if (roblox_hwnd) SetForegroundWindow(roblox_hwnd);
 
             is_claiming = true;
@@ -1888,21 +1930,22 @@ void c_esp::float_to_target()
             return;
         }
 
+        // If arrived at Vicious (going_to_hive is false)
         if (!vars::bss::going_to_hive)
         {
             vars::bss::is_floating = false;
-            util.m_print("[Float] Arrived at destination!");
+            util.m_print("[Float] Arrived at Vicious!");
         }
         return;
     }
 
-    // ===== MOVEMENT - MINIMAL OVERHEAD =====
+    // ==========================================
+    // VELOCITY MOVEMENT (Your preferred method)
+    // ==========================================
 
-    // Apply noclip only every 1 second
+    // Noclip occasionally
     static std::chrono::steady_clock::time_point last_noclip_time;
-    float ms_since_noclip = std::chrono::duration<float, std::milli>(now - last_noclip_time).count();
-
-    if (ms_since_noclip > 1000.0f)
+    if (std::chrono::duration<float, std::milli>(now - last_noclip_time).count() > 1000.0f)
     {
         last_noclip_time = now;
         std::vector<uintptr_t> children = core.children(cached_character);
@@ -1910,14 +1953,11 @@ void c_esp::float_to_target()
             std::string className = core.get_instance_classname(child);
             if (className.find("Part") != std::string::npos || className.find("Mesh") != std::string::npos) {
                 uintptr_t prim = memory->read<uintptr_t>(child + offsets::Primitive);
-                if (prim) {
-                    memory->write<bool>(prim + offsets::CanCollide, false);
-                }
+                if (prim) memory->write<bool>(prim + offsets::CanCollide, false);
             }
         }
     }
 
-    // Move using velocity - this is the ONLY thing that runs every frame
     float nx = dx / distance;
     float ny = dy / distance;
     float nz = dz / distance;
@@ -2086,15 +2126,13 @@ bool c_esp::find_hive_position(float& out_x, float& out_y, float& out_z)
 
 void c_esp::test_hive_claiming()
 {
-    if (!vars::bss::test_hive_claim) {
-        vars::bss::is_floating = false;
-        return;
-    }
+    // Just return if not testing. DO NOT reset is_floating here because Vicious Hunter needs it!
+    if (!vars::bss::test_hive_claim) return;
 
     if (vars::bss::hive_claimed) {
         util.m_print("[Hive Test] Already claimed, disabling test");
         vars::bss::test_hive_claim = false;
-        vars::bss::is_floating = false;
+        vars::bss::is_floating = false; // Safe to reset here since we are turning off the test
         return;
     }
 
@@ -2106,4 +2144,449 @@ void c_esp::test_hive_claiming()
             vars::bss::is_floating = true;
         }
     }
+}
+
+void c_esp::track_vicious_status()
+{
+    if (!g_main::datamodel || !g_main::localplayer) return;
+    if (vars::bss::is_hopping) return;
+    if (!vars::bss::vicious_found) return;
+
+    // DON'T track while going to hive or floating
+    if (vars::bss::going_to_hive) return;
+    if (vars::bss::is_floating) return;
+
+    static uintptr_t cached_workspace = 0;
+    static uintptr_t cached_monsters = 0;
+    static std::chrono::steady_clock::time_point last_cache_time;
+
+    auto now = std::chrono::steady_clock::now();
+    float ms_since_cache = std::chrono::duration<float, std::milli>(now - last_cache_time).count();
+
+    if (ms_since_cache > 300.0f || cached_workspace == 0)
+    {
+        last_cache_time = now;
+        cached_workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+        if (cached_workspace)
+        {
+            cached_monsters = core.find_first_child(cached_workspace, "Monsters");
+        }
+    }
+
+    if (!cached_monsters)
+    {
+        vars::bss::vicious_alive = false;
+        return;
+    }
+
+    std::vector<uintptr_t> monsters = core.children(cached_monsters);
+    bool found_vicious = false;
+
+    for (uintptr_t monster : monsters)
+    {
+        if (!monster) continue;
+
+        std::string name = core.get_instance_name(monster);
+        if (name.find("Vicious") != std::string::npos)
+        {
+            found_vicious = true;
+            break;
+        }
+    }
+
+    vars::bss::vicious_alive = found_vicious;
+}
+
+void c_esp::stay_on_vicious()
+{
+    // Basic checks
+    if (!vars::bss::vicious_found) return;
+    if (!vars::bss::vicious_alive) return;
+    if (vars::bss::is_hopping) return;
+    if (vars::bss::going_to_hive) return;
+
+    // Don't interfere while floating to target initially
+    if (vars::bss::is_floating) return;
+
+    // Wait for hive claim
+    if (vars::bss::need_hive_first && !vars::bss::hive_claimed) return;
+
+    if (!g_main::datamodel || !g_main::localplayer) return;
+
+    // Set tracking flag
+    vars::bss::tracking_vicious = true;
+
+    // State variables for safe hovering
+    static bool has_touched = false;
+    static uintptr_t last_vicious_ptr = 0;
+
+    // Cache pointers (500ms)
+    static uintptr_t cached_workspace = 0;
+    static uintptr_t cached_character = 0;
+    static uintptr_t cached_primitive = 0;
+    static std::chrono::steady_clock::time_point last_cache_time;
+
+    auto now = std::chrono::steady_clock::now();
+    float ms_since_cache = std::chrono::duration<float, std::milli>(now - last_cache_time).count();
+
+    if (ms_since_cache > 500.0f || cached_workspace == 0)
+    {
+        last_cache_time = now;
+        cached_workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+        if (!cached_workspace) return;
+        cached_character = core.find_first_child(cached_workspace, core.get_instance_name(g_main::localplayer));
+        if (!cached_character) return;
+        uintptr_t hrp = core.find_first_child(cached_character, "HumanoidRootPart");
+        if (!hrp) return;
+        cached_primitive = memory->read<uintptr_t>(hrp + offsets::Primitive);
+    }
+
+    if (!cached_primitive || !cached_workspace) return;
+
+    uintptr_t monsters = core.find_first_child(cached_workspace, "Monsters");
+    if (!monsters) return;
+
+    std::vector<uintptr_t> monster_list = core.children(monsters);
+
+    for (uintptr_t monster : monster_list)
+    {
+        if (!monster) continue;
+
+        std::string name = core.get_instance_name(monster);
+        if (name.find("Vicious") == std::string::npos) continue;
+
+        // Reset touch state if it's a new Vicious instance
+        if (monster != last_vicious_ptr)
+        {
+            last_vicious_ptr = monster;
+            has_touched = false;
+            util.m_print("[Vicious] New target found. Resetting touch state.");
+        }
+
+        // Get Vicious Position
+        uintptr_t vicious_part = core.find_first_child(monster, "HumanoidRootPart");
+        if (!vicious_part) vicious_part = core.find_first_child(monster, "Torso");
+        if (!vicious_part) vicious_part = core.find_first_child(monster, "Head");
+        if (!vicious_part) continue;
+
+        uintptr_t vicious_prim = memory->read<uintptr_t>(vicious_part + offsets::Primitive);
+        if (!vicious_prim) continue;
+
+        vector vicious_pos = memory->read<vector>(vicious_prim + offsets::Position);
+        vector current_pos = memory->read<vector>(cached_primitive + offsets::Position);
+
+        // Calculate distance
+        float dx = vicious_pos.x - current_pos.x;
+        float dy = vicious_pos.y - current_pos.y;
+        float dz = vicious_pos.z - current_pos.z;
+        float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+
+        // Logic: Touch first, then Hover
+        vector target_pos = vicious_pos;
+
+        if (!has_touched)
+        {
+            // GOAL: Go inside the bee to trigger it
+            target_pos = vicious_pos;
+
+            if (distance < 8.0f) // Close enough to touch
+            {
+                has_touched = true;
+                util.m_print("[Vicious] Touched! Backing off to safe distance...");
+            }
+        }
+        else
+        {
+            // GOAL: Hover safely above the bee
+            // +25 studs Y is usually safe from spikes
+            target_pos.x = vicious_pos.x;
+            target_pos.y = vicious_pos.y + 25.0f;
+            target_pos.z = vicious_pos.z;
+        }
+
+        // Move towards specific target (Touch or Safe Hover)
+        float tdx = target_pos.x - current_pos.x;
+        float tdy = target_pos.y - current_pos.y;
+        float tdz = target_pos.z - current_pos.z;
+        float target_dist = sqrtf(tdx * tdx + tdy * tdy + tdz * tdz);
+
+        if (target_dist > 2.0f)
+        {
+            // Move fast towards safety
+            float nx = tdx / target_dist;
+            float ny = tdy / target_dist;
+            float nz = tdz / target_dist;
+
+            float speed = 60.0f; // Fast enough to dodge, slow enough to track
+
+            vector velocity;
+            velocity.x = nx * speed;
+            velocity.y = ny * speed;
+            velocity.z = nz * speed;
+
+            memory->write<vector>(cached_primitive + offsets::Velocity, velocity);
+        }
+        else
+        {
+            // Hold position relative to bee
+            memory->write<vector>(cached_primitive + offsets::Velocity, vector{ 0, 0, 0 });
+        }
+
+        // Only track one vicious bee
+        break;
+    }
+}
+void c_esp::check_vicious_death()
+{
+    if (!vars::bss::vicious_hunter) return;
+    if (!vars::bss::vicious_found) return;
+    if (vars::bss::is_hopping) return;
+    if (vars::bss::is_floating) return;
+    if (vars::bss::going_to_hive) return;
+
+    // Only check death after we're actually attacking
+    if (vars::bss::need_hive_first && !vars::bss::hive_claimed) return;
+
+    static bool was_alive = false;
+    static bool confirming_death = false;
+    static std::chrono::steady_clock::time_point death_start;
+
+    auto now = std::chrono::steady_clock::now();
+
+    if (!was_alive && vars::bss::vicious_alive)
+    {
+        was_alive = true;
+        vars::bss::tracking_vicious = true;
+        util.m_print("[Vicious] Started attacking!");
+    }
+
+    if (was_alive && !vars::bss::vicious_alive)
+    {
+        if (!confirming_death)
+        {
+            confirming_death = true;
+            death_start = now;
+            util.m_print("[Vicious] Disappeared, confirming kill...");
+            return;
+        }
+
+        float confirm_time = std::chrono::duration<float>(now - death_start).count();
+
+        if (confirm_time > 3.0f)
+        {
+            confirming_death = false;
+            was_alive = false;
+            vars::bss::tracking_vicious = false;
+            vars::bss::vicious_kills++;
+
+            util.m_print("[Vicious] ===== KILLED! =====");
+            util.m_print("[Vicious] Total Kills: %d", vars::bss::vicious_kills);
+            util.m_print("[Vicious] Servers Checked: %d", vars::bss::servers_checked);
+
+            if (vars::bss::webhook_enabled && !vars::bss::webhook_url.empty())
+            {
+                float session_time = get_session_time();
+                int minutes = (int)(session_time / 60);
+                int seconds = (int)session_time % 60;
+
+                char msg[512];
+                sprintf_s(msg, "**Vicious Bee Killed!**\\nKills: %d\\nServers: %d\\nTime: %dm %ds",
+                    vars::bss::vicious_kills,
+                    vars::bss::servers_checked,
+                    minutes, seconds);
+
+                std::string webhook_cmd = "start /B curl -X POST -H \"Content-Type: application/json\" -d \"{\\\"content\\\":\\\"";
+                webhook_cmd += msg;
+                webhook_cmd += "\\\"}\" \"" + vars::bss::webhook_url + "\" >nul 2>&1";
+                system(webhook_cmd.c_str());
+            }
+
+            util.m_print("[Vicious] Hopping to find another...");
+
+            vars::bss::vicious_found = false;
+            vars::bss::hive_claimed = false;
+            vars::bss::is_floating = false;
+            vars::bss::going_to_hive = false;
+
+            server_hop();
+        }
+    }
+
+    if (confirming_death && vars::bss::vicious_alive)
+    {
+        confirming_death = false;
+        util.m_print("[Vicious] Still alive, continuing attack...");
+    }
+}
+
+float c_esp::get_session_time()
+{
+    static auto session_start = std::chrono::steady_clock::now();
+    static bool initialized = false;
+
+    if (!initialized)
+    {
+        session_start = std::chrono::steady_clock::now();
+        initialized = true;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration<float>(now - session_start).count();
+}
+
+bool c_esp::is_server_visited(const std::string& job_id)
+{
+    if (job_id.empty()) return false;
+
+    auto now = std::chrono::steady_clock::now();
+
+    // Clean up old entries while checking
+    auto it = vars::bss::visited_servers.begin();
+    while (it != vars::bss::visited_servers.end())
+    {
+        float elapsed = std::chrono::duration<float>(now - it->visit_time).count();
+
+        // Remove if older than blacklist time
+        if (elapsed > vars::bss::server_blacklist_time)
+        {
+            util.m_print("[Server] Unblacklisted old server: %s (%.0f seconds old)",
+                it->job_id.substr(0, 8).c_str(), elapsed);
+            it = vars::bss::visited_servers.erase(it);
+        }
+        else
+        {
+            // Check if this is the server we're looking for
+            if (it->job_id == job_id)
+            {
+                float time_left = vars::bss::server_blacklist_time - elapsed;
+                util.m_print("[Server] Already visited (%.0f seconds remaining)", time_left);
+                return true;
+            }
+            ++it;
+        }
+    }
+
+    return false;
+}
+
+void c_esp::mark_server_visited()
+{
+    std::string job_id = get_current_job_id();
+    if (job_id.empty()) return;
+
+    // Check if already in list (update timestamp if so)
+    for (auto& server : vars::bss::visited_servers)
+    {
+        if (server.job_id == job_id)
+        {
+            server.visit_time = std::chrono::steady_clock::now();
+            return;
+        }
+    }
+
+    // Add new server
+    vars::bss::ServerEntry entry;
+    entry.job_id = job_id;
+    entry.visit_time = std::chrono::steady_clock::now();
+
+    vars::bss::visited_servers.push_back(entry);
+    vars::bss::current_job_id = job_id;
+
+    util.m_print("[Server] Marked as visited: %s", job_id.substr(0, 8).c_str());
+    util.m_print("[Server] Total blacklisted: %d", (int)vars::bss::visited_servers.size());
+}
+
+// Add a function to clean up old servers periodically
+void c_esp::cleanup_old_servers()
+{
+    static std::chrono::steady_clock::time_point last_cleanup;
+    auto now = std::chrono::steady_clock::now();
+
+    // Clean up every 30 seconds
+    if (std::chrono::duration<float>(now - last_cleanup).count() < 30.0f)
+        return;
+
+    last_cleanup = now;
+
+    int removed = 0;
+    auto it = vars::bss::visited_servers.begin();
+    while (it != vars::bss::visited_servers.end())
+    {
+        float elapsed = std::chrono::duration<float>(now - it->visit_time).count();
+
+        if (elapsed > vars::bss::server_blacklist_time)
+        {
+            it = vars::bss::visited_servers.erase(it);
+            removed++;
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    if (removed > 0)
+    {
+        util.m_print("[Server] Cleaned up %d old servers from blacklist", removed);
+    }
+}
+
+// Optional: Get active blacklist count
+int c_esp::get_active_blacklist_count()
+{
+    auto now = std::chrono::steady_clock::now();
+    int count = 0;
+
+    for (const auto& server : vars::bss::visited_servers)
+    {
+        float elapsed = std::chrono::duration<float>(now - server.visit_time).count();
+        if (elapsed <= vars::bss::server_blacklist_time)
+        {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+bool c_esp::has_friends_in_server()
+{
+    if (!vars::bss::avoid_friends) return false;
+    if (!g_main::datamodel) return false;
+    if (vars::bss::blacklisted_friends.empty()) return false;
+
+    uintptr_t players_service = core.find_first_child_class(g_main::datamodel, "Players");
+    if (!players_service) return false;
+
+    std::vector<uintptr_t> players = core.children(players_service);
+
+    for (uintptr_t player : players)
+    {
+        if (!player) continue;
+        if (player == g_main::localplayer) continue;
+
+        std::string player_name = core.get_instance_name(player);
+
+        // Check against blacklisted friends
+        for (const auto& friend_name : vars::bss::blacklisted_friends)
+        {
+            if (player_name == friend_name)
+            {
+                util.m_print("[Server] Friend '%s' found in server, skipping!", friend_name.c_str());
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+std::string c_esp::get_current_job_id()
+{
+    // Use datamodel address as unique server identifier
+    if (!g_main::datamodel) return "";
+
+    char buffer[32];
+    sprintf_s(buffer, "%llX", g_main::datamodel);
+    return std::string(buffer);
 }
