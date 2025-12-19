@@ -1734,60 +1734,93 @@ void c_esp::float_to_target()
     if (!g_main::datamodel || !g_main::localplayer) return;
     if (!tp_handler.is_ready()) return;
 
-    uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
-    if (!workspace) return;
+    // Static variables for caching and claiming state
+    static bool is_claiming = false;
+    static std::chrono::steady_clock::time_point claim_start_time;
+    static int press_count = 0;
+    static std::chrono::steady_clock::time_point last_press_time;
+    static HWND roblox_hwnd = NULL;
 
-    uintptr_t local_character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
-    if (!local_character) return;
+    // Cache these to avoid repeated lookups
+    static uintptr_t cached_workspace = 0;
+    static uintptr_t cached_character = 0;
+    static uintptr_t cached_hrp = 0;
+    static uintptr_t cached_primitive = 0;
+    static std::chrono::steady_clock::time_point last_cache_update;
 
-    uintptr_t local_hrp = core.find_first_child(local_character, "HumanoidRootPart");
-    if (!local_hrp) return;
+    auto now = std::chrono::steady_clock::now();
+    float ms_since_cache = std::chrono::duration<float, std::milli>(now - last_cache_update).count();
 
-    uintptr_t local_primitive = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
-    if (!local_primitive) return;
+    // Update cache every 500ms instead of every frame
+    if (ms_since_cache > 500.0f || cached_primitive == 0)
+    {
+        last_cache_update = now;
 
-    // Apply noclip to all character parts
-    std::vector<uintptr_t> children = core.children(local_character);
-    for (auto child : children) {
-        std::string className = core.get_instance_classname(child);
-        if (className.find("Part") != std::string::npos || className.find("Mesh") != std::string::npos) {
-            uintptr_t prim = memory->read<uintptr_t>(child + offsets::Primitive);
-            if (prim) {
-                memory->write<bool>(prim + offsets::CanCollide, false);
-            }
-        }
+        cached_workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
+        if (!cached_workspace) return;
+
+        cached_character = core.find_first_child(cached_workspace, core.get_instance_name(g_main::localplayer));
+        if (!cached_character) return;
+
+        cached_hrp = core.find_first_child(cached_character, "HumanoidRootPart");
+        if (!cached_hrp) return;
+
+        cached_primitive = memory->read<uintptr_t>(cached_hrp + offsets::Primitive);
     }
 
-    vector current_pos = memory->read<vector>(local_primitive + offsets::Position);
+    if (!cached_primitive) return;
+
+    vector current_pos = memory->read<vector>(cached_primitive + offsets::Position);
 
     float dx = vars::bss::target_x - current_pos.x;
     float dy = vars::bss::target_y - current_pos.y;
     float dz = vars::bss::target_z - current_pos.z;
     float distance = sqrtf(dx * dx + dy * dy + dz * dz);
 
-    if (distance < 10.0f)
+    // If we're in claiming mode
+    if (is_claiming && vars::bss::going_to_hive)
     {
-        memory->write<vector>(local_primitive + offsets::Velocity, vector{ 0, 0, 0 });
+        float elapsed = std::chrono::duration<float>(now - claim_start_time).count();
 
-        if (vars::bss::going_to_hive)
+        // Keep player at hive
+        memory->write<vector>(cached_primitive + offsets::Velocity, vector{ 0, 0, 0 });
+
+        // Press E every 150ms (non-blocking)
+        float ms_since_last_press = std::chrono::duration<float, std::milli>(now - last_press_time).count();
+        if (ms_since_last_press > 150.0f)
         {
-            util.m_print("[Hive] Arrived! Pressing E to claim...");
+            last_press_time = now;
+            press_count++;
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            // SendInput method
+            INPUT inputs[2] = {};
+            inputs[0].type = INPUT_KEYBOARD;
+            inputs[0].ki.wScan = 0x12;
+            inputs[0].ki.dwFlags = KEYEVENTF_SCANCODE;
+            inputs[1].type = INPUT_KEYBOARD;
+            inputs[1].ki.wScan = 0x12;
+            inputs[1].ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
 
-            // Press E multiple times to claim
-            for (int i = 0; i < 5; i++)
+            SendInput(1, &inputs[0], sizeof(INPUT));
+            SendInput(1, &inputs[1], sizeof(INPUT));
+
+            if (roblox_hwnd)
             {
-                keybd_event('E', 0, 0, 0);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                keybd_event('E', 0, KEYEVENTF_KEYUP, 0);
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                PostMessageA(roblox_hwnd, WM_KEYDOWN, 'E', 0);
+                PostMessageA(roblox_hwnd, WM_KEYUP, 'E', 0);
             }
+        }
 
-            // Now verify if we actually claimed it
-            uintptr_t hive_platforms = core.find_first_child(workspace, "HivePlatforms");
-            bool actually_claimed = false;
+        // Check if claimed every 2 seconds (not every 30 presses)
+        static std::chrono::steady_clock::time_point last_claim_check;
+        float ms_since_check = std::chrono::duration<float, std::milli>(now - last_claim_check).count();
 
+        if (ms_since_check > 2000.0f)
+        {
+            last_claim_check = now;
+            util.m_print("[Hive] Claiming... (%.1fs)", elapsed);
+
+            uintptr_t hive_platforms = core.find_first_child(cached_workspace, "HivePlatforms");
             if (hive_platforms)
             {
                 std::vector<uintptr_t> platforms = core.children(hive_platforms);
@@ -1803,37 +1836,88 @@ void c_esp::float_to_target()
                     uintptr_t owner = memory->read<uintptr_t>(player_ref + offsets::Misc::Value);
                     if (owner == g_main::localplayer)
                     {
-                        actually_claimed = true;
-                        break;
+                        util.m_print("[Hive] Successfully claimed!");
+                        is_claiming = false;
+                        vars::bss::hive_claimed = true;
+                        vars::bss::going_to_hive = false;
+
+                        vars::bss::target_x = vars::bss::stored_vicious_x;
+                        vars::bss::target_y = vars::bss::stored_vicious_y;
+                        vars::bss::target_z = vars::bss::stored_vicious_z;
+                        util.m_print("[Hive] Now going to Vicious!");
+                        return;
                     }
                 }
             }
+        }
 
-            if (actually_claimed)
-            {
-                util.m_print("[Hive] Successfully claimed!");
-            }
-            else
-            {
-                util.m_print("[Hive] Claim may have failed, continuing anyway...");
-            }
-
+        // Timeout after 15 seconds
+        if (elapsed > 15.0f)
+        {
+            util.m_print("[Hive] Claim timeout, continuing anyway...");
+            is_claiming = false;
             vars::bss::hive_claimed = true;
             vars::bss::going_to_hive = false;
 
-            util.m_print("[Hive] Now going to Vicious!");
             vars::bss::target_x = vars::bss::stored_vicious_x;
             vars::bss::target_y = vars::bss::stored_vicious_y;
             vars::bss::target_z = vars::bss::stored_vicious_z;
-            return;
         }
 
-        vars::bss::is_floating = false;
-        util.m_print("[Float] Arrived at destination!");
         return;
     }
 
-    // Move using velocity
+    // Arrived at destination
+    if (distance < 10.0f)
+    {
+        memory->write<vector>(cached_primitive + offsets::Velocity, vector{ 0, 0, 0 });
+
+        if (vars::bss::going_to_hive && !is_claiming)
+        {
+            util.m_print("[Hive] Arrived! Starting claim...");
+
+            roblox_hwnd = FindWindowA(NULL, "Roblox");
+            if (!roblox_hwnd) roblox_hwnd = FindWindowA("WINDOWSCLIENT", NULL);
+
+            if (roblox_hwnd) SetForegroundWindow(roblox_hwnd);
+
+            is_claiming = true;
+            claim_start_time = now;
+            last_press_time = now;
+            press_count = 0;
+            return;
+        }
+
+        if (!vars::bss::going_to_hive)
+        {
+            vars::bss::is_floating = false;
+            util.m_print("[Float] Arrived at destination!");
+        }
+        return;
+    }
+
+    // ===== MOVEMENT - MINIMAL OVERHEAD =====
+
+    // Apply noclip only every 1 second
+    static std::chrono::steady_clock::time_point last_noclip_time;
+    float ms_since_noclip = std::chrono::duration<float, std::milli>(now - last_noclip_time).count();
+
+    if (ms_since_noclip > 1000.0f)
+    {
+        last_noclip_time = now;
+        std::vector<uintptr_t> children = core.children(cached_character);
+        for (auto child : children) {
+            std::string className = core.get_instance_classname(child);
+            if (className.find("Part") != std::string::npos || className.find("Mesh") != std::string::npos) {
+                uintptr_t prim = memory->read<uintptr_t>(child + offsets::Primitive);
+                if (prim) {
+                    memory->write<bool>(prim + offsets::CanCollide, false);
+                }
+            }
+        }
+    }
+
+    // Move using velocity - this is the ONLY thing that runs every frame
     float nx = dx / distance;
     float ny = dy / distance;
     float nz = dz / distance;
@@ -1843,7 +1927,7 @@ void c_esp::float_to_target()
     velocity.y = ny * vars::bss::float_speed;
     velocity.z = nz * vars::bss::float_speed;
 
-    memory->write<vector>(local_primitive + offsets::Velocity, velocity);
+    memory->write<vector>(cached_primitive + offsets::Velocity, velocity);
 }
 
 
