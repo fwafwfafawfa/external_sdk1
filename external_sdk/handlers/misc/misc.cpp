@@ -187,14 +187,14 @@ void c_misc::spectate(uintptr_t player_instance)
         return;
     }
 
-    uintptr_t player_mouse = memory->read<uintptr_t>(local_player_obj + offsets::PlayerMouse);
+    uintptr_t player_mouse = memory->read<uintptr_t>(local_player_obj + offsets::Player::Mouse);
     if (!player_mouse)
     {
         util.m_print("Spectate Player: PlayerMouse object not found.");
         return;
     }
 
-    uintptr_t camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Camera);
+    uintptr_t camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Workspace::CurrentCamera);
     if (!camera_obj)
     {
         util.m_print("Spectate Player: Camera object not found.");

@@ -345,7 +345,7 @@ void c_esp::run_players(view_matrix_t viewmatrix)
 
         if (vars::esp::hide_teammates)
         {
-            uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+            uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
             if (player_team == g_main::localplayer_team && player_team != 0)
                 continue;
         }
@@ -593,7 +593,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
                 // Team check
                 if (vars::aimbot::ignore_teammates)
                 {
-                    uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+                    uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
                     if (player_team == g_main::localplayer_team && player_team != 0)
                     {
                         this->locked_target = 0;
@@ -684,7 +684,7 @@ void c_esp::run_aimbot(view_matrix_t viewmatrix)
 
             if (vars::aimbot::ignore_teammates)
             {
-                uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+                uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
                 if (player_team == g_main::localplayer_team && player_team != 0) continue;
             }
 
@@ -1193,7 +1193,7 @@ void c_esp::draw_hitbox_esp(view_matrix_t viewmatrix)
 
         if (vars::combat::hitbox_skip_teammates)
         {
-            uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+            uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
             if (player_team != 0 && player_team == g_main::localplayer_team)
                 continue;
         }
@@ -1350,7 +1350,7 @@ void c_esp::hitbox_expander_thread()
                 {
                     try
                     {
-                        uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Team);
+                        uintptr_t player_team = memory->read<uintptr_t>(player + offsets::Player::Team);
                         if (player_team != 0 && player_team == g_main::localplayer_team)
                             continue;
                     }
@@ -1596,7 +1596,7 @@ void c_esp::run_vicious_hunter()
 
     auto now = std::chrono::steady_clock::now();
     float elapsed = std::chrono::duration<float>(now - join_time).count();
-    float required_delay = just_hopped ? 15.0f : vars::bss::check_delay;
+    float required_delay = just_hopped ? vars::bss::server_load_delay : vars::bss::check_delay;
 
     if (elapsed < required_delay) return;
 
@@ -1746,7 +1746,7 @@ void c_esp::float_to_target()
     uintptr_t local_primitive = memory->read<uintptr_t>(local_hrp + offsets::Primitive);
     if (!local_primitive) return;
 
-    // Apply noclip every frame to all character parts
+    // Apply noclip to all character parts
     std::vector<uintptr_t> children = core.children(local_character);
     for (auto child : children) {
         std::string className = core.get_instance_classname(child);
@@ -1771,26 +1771,57 @@ void c_esp::float_to_target()
 
         if (vars::bss::going_to_hive)
         {
-            util.m_print("[Vicious Hunter] At hive! Pressing E to claim...");
+            util.m_print("[Hive] Arrived! Pressing E to claim...");
 
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-            // Hold E for longer duration
+            // Press E multiple times to claim
             for (int i = 0; i < 5; i++)
             {
                 keybd_event('E', 0, 0, 0);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // Hold 1 second
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 keybd_event('E', 0, KEYEVENTF_KEYUP, 0);
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
             }
 
-            util.m_print("[Vicious Hunter] Waiting %.1fs for hive claim...", vars::bss::hive_wait_time);
-            std::this_thread::sleep_for(std::chrono::milliseconds((int)(vars::bss::hive_wait_time * 1000)));
+            // Now verify if we actually claimed it
+            uintptr_t hive_platforms = core.find_first_child(workspace, "HivePlatforms");
+            bool actually_claimed = false;
+
+            if (hive_platforms)
+            {
+                std::vector<uintptr_t> platforms = core.children(hive_platforms);
+                for (uintptr_t platform : platforms)
+                {
+                    if (!platform) continue;
+                    std::string name = core.get_instance_name(platform);
+                    if (name != "Platform") continue;
+
+                    uintptr_t player_ref = core.find_first_child(platform, "PlayerRef");
+                    if (!player_ref) continue;
+
+                    uintptr_t owner = memory->read<uintptr_t>(player_ref + offsets::Misc::Value);
+                    if (owner == g_main::localplayer)
+                    {
+                        actually_claimed = true;
+                        break;
+                    }
+                }
+            }
+
+            if (actually_claimed)
+            {
+                util.m_print("[Hive] Successfully claimed!");
+            }
+            else
+            {
+                util.m_print("[Hive] Claim may have failed, continuing anyway...");
+            }
 
             vars::bss::hive_claimed = true;
             vars::bss::going_to_hive = false;
 
-            util.m_print("[Vicious Hunter] Going to Vicious!");
+            util.m_print("[Hive] Now going to Vicious!");
             vars::bss::target_x = vars::bss::stored_vicious_x;
             vars::bss::target_y = vars::bss::stored_vicious_y;
             vars::bss::target_z = vars::bss::stored_vicious_z;
@@ -1798,10 +1829,11 @@ void c_esp::float_to_target()
         }
 
         vars::bss::is_floating = false;
-        util.m_print("[Vicious Hunter] Arrived!");
+        util.m_print("[Float] Arrived at destination!");
         return;
     }
 
+    // Move using velocity
     float nx = dx / distance;
     float ny = dy / distance;
     float nz = dz / distance;
@@ -1814,6 +1846,7 @@ void c_esp::float_to_target()
     memory->write<vector>(local_primitive + offsets::Velocity, velocity);
 }
 
+
 bool c_esp::find_hive_position(float& out_x, float& out_y, float& out_z)
 {
     if (!g_main::datamodel || !g_main::localplayer) return false;
@@ -1821,132 +1854,172 @@ bool c_esp::find_hive_position(float& out_x, float& out_y, float& out_z)
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     if (!workspace) return false;
 
-    uintptr_t honeycombs = core.find_first_child(workspace, "Honeycombs");
-    if (!honeycombs) return false;
-
-    std::string player_name = core.get_instance_name(g_main::localplayer);
-    util.m_print("[Hive] Looking for hive. Player: %s", player_name.c_str());
-
-    uintptr_t best_hive = 0;
-    int best_hive_num = -1;
-
-    for (int i = 1; i <= 6; i++)
-    {
-        std::string hive_name = "Hive" + std::to_string(i);
-        uintptr_t hive = core.find_first_child(honeycombs, hive_name);
-        if (!hive) continue;
-
-        bool is_available = false;
-        int total_slots_with_bees = 0;
-
-        // Check bee slots by looking for LevelPart in each slot model
-        for (int row = 1; row <= 5; row++)
-        {
-            for (int col = 1; col <= 10; col++)
-            {
-                std::string slot_name = std::to_string(row) + "." + std::to_string(col);
-                uintptr_t slot = core.find_first_child(hive, slot_name);
-
-                if (slot)
-                {
-                    // Check if this slot has a LevelPart (indicates a bee is present)
-                    uintptr_t level_part = core.find_first_child(slot, "LevelPart");
-                    if (level_part)
-                    {
-                        total_slots_with_bees++;
-                    }
-                }
-            }
-        }
-
-        util.m_print("[Hive] %s has %d slots with bees", hive_name.c_str(), total_slots_with_bees);
-
-        // If no bees in any slots, hive is unclaimed/available
-        if (total_slots_with_bees == 0)
-        {
-            is_available = true;
-            util.m_print("[Hive] %s is UNCLAIMED (no bees)", hive_name.c_str());
-        }
-
-        // Try TextLabel method to see if it's OUR hive
-        uintptr_t display = core.find_first_child(hive, "Display");
-        if (display)
-        {
-            uintptr_t gui = core.find_first_child(display, "Gui");
-            if (gui)
-            {
-                uintptr_t frame = core.find_first_child(gui, "Frame");
-                if (frame)
-                {
-                    uintptr_t owner_label = core.find_first_child(frame, "OwnerName");
-                    if (owner_label)
-                    {
-                        uintptr_t text_ptr = memory->read<uintptr_t>(owner_label + offsets::TextLabelText);
-                        std::string owner_text = "";
-
-                        if (text_ptr && text_ptr > 0x10000)
-                        {
-                            owner_text = core.length_read_string(text_ptr);
-                        }
-
-                        util.m_print("[Hive] %s OwnerName: '%s'", hive_name.c_str(), owner_text.c_str());
-
-                        // If this is OUR hive, prioritize it
-                        if (!owner_text.empty() && owner_text == player_name && total_slots_with_bees > 0)
-                        {
-                            util.m_print("[Hive] %s is YOUR hive!", hive_name.c_str());
-                            best_hive = hive;
-                            best_hive_num = i;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Save first available hive as fallback
-        if (is_available && best_hive == 0)
-        {
-            best_hive = hive;
-            best_hive_num = i;
-        }
+    uintptr_t hive_platforms = core.find_first_child(workspace, "HivePlatforms");
+    if (!hive_platforms) {
+        util.m_print("[Hive] HivePlatforms folder not found");
+        return false;
     }
 
-    // If we found a hive (either ours or available), get its position
-    if (best_hive != 0 && best_hive_num != -1)
-    {
-        uintptr_t hive_platforms = core.find_first_child(workspace, "HivePlatforms");
-        if (hive_platforms)
-        {
-            std::vector<uintptr_t> platforms = core.children(hive_platforms);
-            if (platforms.size() >= (size_t)best_hive_num)
-            {
-                uintptr_t platform = platforms[best_hive_num - 1];
+    std::vector<uintptr_t> platforms = core.children(hive_platforms);
 
-                std::vector<uintptr_t> platform_children = core.children(platform);
-                for (uintptr_t child : platform_children)
-                {
-                    std::string class_name = core.get_instance_classname(child);
-                    if (class_name.find("Part") != std::string::npos ||
-                        class_name.find("Union") != std::string::npos ||
-                        class_name.find("Mesh") != std::string::npos)
-                    {
-                        uintptr_t primitive = memory->read<uintptr_t>(child + offsets::Primitive);
-                        if (primitive)
-                        {
-                            vector pos = memory->read<vector>(primitive + offsets::Position);
-                            out_x = pos.x;
-                            out_y = pos.y + 10.0f;
-                            out_z = pos.z;
-                            util.m_print("[Hive] Hive%d Position: %.1f, %.1f, %.1f", best_hive_num, out_x, out_y, out_z);
-                            return true;
-                        }
-                    }
-                }
+    uintptr_t my_platform = 0;
+    uintptr_t unclaimed_platform = 0;
+
+    int claimed_count = 0;
+    int unclaimed_count = 0;
+
+    util.m_print("[Hive] ===== SCANNING ALL HIVES =====");
+
+    for (uintptr_t platform : platforms)
+    {
+        if (!platform) continue;
+
+        std::string name = core.get_instance_name(platform);
+        if (name != "Platform") continue;
+
+        // Get the Hive ObjectValue to find actual hive number
+        std::string hive_name = "Unknown";
+        uintptr_t hive_obj = core.find_first_child(platform, "Hive");
+        if (hive_obj)
+        {
+            uintptr_t hive_ref = memory->read<uintptr_t>(hive_obj + offsets::Misc::Value);
+            if (hive_ref)
+            {
+                hive_name = core.get_instance_name(hive_ref);
+            }
+        }
+
+        // Get platform position for reference
+        uintptr_t circle = core.find_first_child(platform, "Circle");
+        float pos_x = 0, pos_z = 0;
+        if (circle)
+        {
+            uintptr_t prim = memory->read<uintptr_t>(circle + offsets::Primitive);
+            if (prim)
+            {
+                vector pos = memory->read<vector>(prim + offsets::Position);
+                pos_x = pos.x;
+                pos_z = pos.z;
+            }
+        }
+
+        // Check PlayerRef ObjectValue to see who owns this hive
+        uintptr_t player_ref = core.find_first_child(platform, "PlayerRef");
+        if (!player_ref) continue;
+
+        uintptr_t owner = memory->read<uintptr_t>(player_ref + offsets::Misc::Value);
+
+        if (owner == 0)
+        {
+            unclaimed_count++;
+            util.m_print("[Hive] %s - UNCLAIMED (pos: %.0f, %.0f)", hive_name.c_str(), pos_x, pos_z);
+
+            if (unclaimed_platform == 0)
+            {
+                unclaimed_platform = platform;
+            }
+        }
+        else if (owner == g_main::localplayer)
+        {
+            claimed_count++;
+            util.m_print("[Hive] %s - YOURS! (pos: %.0f, %.0f)", hive_name.c_str(), pos_x, pos_z);
+            my_platform = platform;
+            vars::bss::hive_claimed = true;
+        }
+        else
+        {
+            claimed_count++;
+            std::string owner_name = core.get_instance_name(owner);
+            if (!owner_name.empty())
+            {
+                util.m_print("[Hive] %s - CLAIMED by '%s'", hive_name.c_str(), owner_name.c_str());
+            }
+            else
+            {
+                util.m_print("[Hive] %s - CLAIMED (unknown)", hive_name.c_str());
             }
         }
     }
 
-    util.m_print("[Hive] No available hive found!");
-    return false;
+    util.m_print("[Hive] ===== SCAN COMPLETE =====");
+    util.m_print("[Hive] Claimed: %d | Unclaimed: %d", claimed_count, unclaimed_count);
+
+    // Prefer our hive, otherwise use unclaimed
+    uintptr_t target_platform = my_platform ? my_platform : unclaimed_platform;
+
+    if (!target_platform)
+    {
+        util.m_print("[Hive] No suitable hive found!");
+        return false;
+    }
+
+    if (my_platform)
+    {
+        util.m_print("[Hive] Going to YOUR hive");
+    }
+    else if (unclaimed_platform)
+    {
+        util.m_print("[Hive] Going to unclaimed hive");
+    }
+
+    // Get position from Circle part
+    uintptr_t circle = core.find_first_child(target_platform, "Circle");
+    if (!circle)
+    {
+        std::vector<uintptr_t> children = core.children(target_platform);
+        for (uintptr_t child : children)
+        {
+            std::string class_name = core.get_instance_classname(child);
+            if (class_name.find("Part") != std::string::npos)
+            {
+                circle = child;
+                break;
+            }
+        }
+    }
+
+    if (!circle)
+    {
+        util.m_print("[Hive] No part found in platform");
+        return false;
+    }
+
+    uintptr_t primitive = memory->read<uintptr_t>(circle + offsets::Primitive);
+    if (!primitive)
+    {
+        util.m_print("[Hive] No primitive found");
+        return false;
+    }
+
+    vector pos = memory->read<vector>(primitive + offsets::Position);
+    out_x = pos.x;
+    out_y = pos.y + 5.0f;
+    out_z = pos.z;
+
+    util.m_print("[Hive] Target Position: %.1f, %.1f, %.1f", out_x, out_y, out_z);
+    return true;
+}
+
+void c_esp::test_hive_claiming()
+{
+    if (!vars::bss::test_hive_claim) {
+        vars::bss::is_floating = false;
+        return;
+    }
+
+    if (vars::bss::hive_claimed) {
+        util.m_print("[Hive Test] Already claimed, disabling test");
+        vars::bss::test_hive_claim = false;
+        vars::bss::is_floating = false;
+        return;
+    }
+
+    if (!vars::bss::is_floating) {
+        util.m_print("[Hive Test] Finding hive...");
+        if (find_hive_position(vars::bss::target_x, vars::bss::target_y, vars::bss::target_z))
+        {
+            vars::bss::going_to_hive = true;
+            vars::bss::is_floating = true;
+        }
+    }
 }

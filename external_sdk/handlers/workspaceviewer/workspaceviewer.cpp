@@ -51,10 +51,10 @@ void c_workspace_viewer::draw_selected_instance_highlight() {
     uintptr_t local_player_obj = g_main::localplayer;
     if (!local_player_obj) return;
 
-    uintptr_t player_mouse = memory->read<uintptr_t>(local_player_obj + offsets::PlayerMouse);
+    uintptr_t player_mouse = memory->read<uintptr_t>(local_player_obj + offsets::Player::Mouse);
     if (!player_mouse) return;
 
-    uintptr_t camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Camera);
+    uintptr_t camera_obj = memory->read<uintptr_t>(player_mouse + offsets::Workspace::CurrentCamera);
     if (!camera_obj) return;
 
     view_matrix = memory->read<view_matrix_t>(g_main::v_engine + offsets::viewmatrix);

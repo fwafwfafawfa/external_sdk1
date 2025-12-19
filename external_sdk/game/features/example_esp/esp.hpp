@@ -64,6 +64,7 @@ public:
     void server_hop();
     void load_hunter_state();
     void float_to_target();
+    void test_hive_claiming();
 
     bool is_visible(const vector& from, const vector& to, uintptr_t target_model);
     bool is_visible(const vector& from, const vector& head, const vector& torso, const vector& pelvis, const vector& left_foot, const vector& right_foot, uintptr_t target_model);

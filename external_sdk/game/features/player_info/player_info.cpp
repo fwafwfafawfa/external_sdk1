@@ -97,7 +97,7 @@ void c_player_info::draw_player_info(uintptr_t player_instance)
 
     std::string spectateID = "Spectate##" + player_name;
     if (ImGui::Button(spectateID.c_str())) {
-        uintptr_t cameraptr = memory->read<uintptr_t>(core.find_first_child_class(g_main::datamodel, "Workspace") + offsets::Camera);
+        uintptr_t cameraptr = memory->read<uintptr_t>(core.find_first_child_class(g_main::datamodel, "Workspace") + offsets::Workspace::CurrentCamera);
         if (cameraptr) {
             if (vars::misc::spectating_player_name == player_name) {
                 vars::misc::spectating_player_name.clear();

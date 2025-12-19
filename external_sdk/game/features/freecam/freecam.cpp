@@ -24,7 +24,7 @@ void c_freecam::set_fov(float fov_degrees)
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     if (!workspace) return;
 
-    uintptr_t camera = memory->read<uintptr_t>(workspace + offsets::Camera);
+    uintptr_t camera = memory->read<uintptr_t>(workspace + offsets::Workspace::CurrentCamera);
     if (!camera) return;
 
     const float PI = 3.14159265358979f;
@@ -57,7 +57,7 @@ void c_freecam::reset_camera_mode()
     uintptr_t workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
     if (!workspace) return;
 
-    uintptr_t cam = memory->read<uintptr_t>(workspace + offsets::Camera);
+    uintptr_t cam = memory->read<uintptr_t>(workspace + offsets::Workspace::CurrentCamera);
     if (!cam) return;
 
     uintptr_t character = core.find_first_child(workspace, core.get_instance_name(g_main::localplayer));
@@ -82,7 +82,7 @@ void c_freecam::run(float dt)
         cached_workspace = core.find_first_child_class(g_main::datamodel, "Workspace");
         if (!cached_workspace) return;
 
-        cached_camera = memory->read<uintptr_t>(cached_workspace + offsets::Camera);
+        cached_camera = memory->read<uintptr_t>(cached_workspace + offsets::Workspace::CurrentCamera);
         if (!cached_camera) return;
     }
 

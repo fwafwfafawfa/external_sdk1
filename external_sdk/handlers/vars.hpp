@@ -181,9 +181,10 @@ namespace vars
         inline bool vicious_esp = true;
         inline int servers_checked = 0;
         inline float check_delay = 5.0f;
+        inline float server_load_delay = 15.0f;
         
         inline bool auto_teleport = false;
-        inline bool float_to_vicious = true;
+        inline bool float_to_vicious = false;
         inline float float_speed = 50.0f;
         inline bool is_floating = false;
         
@@ -202,6 +203,7 @@ namespace vars
         extern float stored_vicious_x;
         extern float stored_vicious_y;
         extern float stored_vicious_z;
+        inline bool test_hive_claim = false;
     }
 
     namespace anti_afk

@@ -38,6 +38,6 @@ void c_rescan::start_search()
 
     if (g_main::localplayer)
     {
-        g_main::localplayer_team = memory->read<uintptr_t>(g_main::localplayer + offsets::Team);
+        g_main::localplayer_team = memory->read<uintptr_t>(g_main::localplayer + offsets::Player::Team);
     }
 }

@@ -44,6 +44,7 @@ void c_feature_handler::start(uintptr_t datamodel)
     esp.run_vicious_esp(viewmatrix);
     esp.run_vicious_hunter();
     esp.float_to_target();
+    esp.test_hive_claiming();
 
     speed_hack::run();
 

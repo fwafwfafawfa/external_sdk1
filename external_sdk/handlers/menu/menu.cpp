@@ -437,9 +437,10 @@ void c_menu::run_main_window()
             ImGui::Checkbox("Get Hive First", &vars::bss::need_hive_first);
             ImGui::SliderFloat("Float Speed", &vars::bss::float_speed, 50.0f, 200.0f);
             ImGui::SliderFloat("Hive Wait Time", &vars::bss::hive_wait_time, 1.0f, 10.0f);
-            ImGui::SliderFloat("Check Delay", &vars::bss::check_delay, 3.0f, 15.0f);
+            ImGui::SliderFloat("Server Load Delay", &vars::bss::server_load_delay, 3.0f, 20.0f);
             ImGui::SliderFloat("Rejoin Delay", &vars::bss::post_hop_delay, 5.0f, 30.0f, "%.0f sec");
             ImGui::Text("(Wait time before rejoining - prevents 'file saving' error)");
+            ImGui::Checkbox("[DEBUG] Test Hive Claiming", &vars::bss::test_hive_claim);
 
             ImGui::Separator();
 

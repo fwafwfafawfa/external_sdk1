@@ -46,7 +46,7 @@ void reinitialize_game_pointers()
         util.m_print("  LocalPlayer: 0x%llX", localplayer);
 
         if (datamodel && v_engine && players_instance && localplayer) {
-            uintptr_t localplayer_team = memory->read<uintptr_t>(localplayer + offsets::Team);
+            uintptr_t localplayer_team = memory->read<uintptr_t>(localplayer + offsets::Player::Team);
 
             g_main::datamodel = datamodel;
             g_main::v_engine = v_engine;
